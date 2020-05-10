@@ -13,7 +13,7 @@ import (
 	"time"
 	"log"
 	"github.com/dedis/crypto/abstract"
-	"proto"
+	"./proto"
 )
 
 // pointer to coordinator itself

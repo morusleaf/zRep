@@ -1,10 +1,10 @@
 package server
 import (
 	"net"
-	"proto"
+	"../proto"
 	"encoding/gob"
 	"bytes"
-	"util"
+	"../util"
 	"fmt"
 	"github.com/dedis/crypto/abstract"
 	"../github.com/dedis/crypto/shuffle"
