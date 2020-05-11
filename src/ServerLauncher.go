@@ -23,7 +23,7 @@ var config map[string]string
 func serverRegister() {
 	// set the parameters to register
 	params := map[string]interface{}{}
-	event := &proto.Event{proto.SERVER_REGISTER,params}
+	event := &proto.Event{EventType:proto.SERVER_REGISTER, Params:params}
 
 	util.Send(anonServer.Socket,anonServer.CoordinatorAddr,util.Encode(event))
 }
@@ -57,11 +57,23 @@ func initAnonServer() {
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	RoundKey := suite.Secret().Pick(random.Stream)
-	anonServer = &server.AnonServer{ServerAddr,nil,suite,a,A,suite.Point(),nil,
-	false,ServerAddr,ServerAddr,make(map[string]abstract.Point),nil,RoundKey}
+	anonServer = &server.AnonServer{
+		CoordinatorAddr: ServerAddr,
+		Socket: nil,
+		Suite: suite,
+		PrivateKey: a,
+		PublicKey: A,
+		OnetimePseudoNym: suite.Point(),
+		G: nil,
+		IsConnected: false,
+		NextHop: ServerAddr,
+		PreviousHop: ServerAddr,
+		KeyMap: make(map[string]abstract.Point),
+		A: nil,
+		Roundkey: RoundKey}
 }
 
-func main() {
+func launchServer() {
 	// init anon server
 	initAnonServer()
 	fmt.Println("[debug] AnonServer started...");
@@ -99,6 +111,6 @@ func main() {
 		time.Sleep(100000000 * time.Millisecond)
 	}
 
-	fmt.Println("[debug] Exit system...");
+	// fmt.Println("[debug] Exit system...");
 
 }

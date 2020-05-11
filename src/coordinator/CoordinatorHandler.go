@@ -18,6 +18,9 @@ import (
 var anonCoordinator *Coordinator
 var srcAddr *net.UDPAddr
 
+
+// Handle Use tmpCoordinator to handle data sent from addr.
+// The data is stored at buf[:n]
 func Handle(buf []byte,addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 	// decode the whole message
 	anonCoordinator = tmpCoordinator
@@ -86,7 +89,7 @@ func handleAnnouncement(params map[string]interface{}) {
 		"g": params["g"].([]byte),
 	}
 
-	event := &proto.Event{proto.ANNOUNCEMENT,pm}
+	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 	for _,val := range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket,val,util.Encode(event))
 	}
@@ -108,7 +111,7 @@ func handleServerRegister() {
 			"reply": true,
 			"next_hop": srcAddr.String(),
 		}
-		event2 := &proto.Event{proto.UPDATE_NEXT_HOP, pm2}
+		event2 := &proto.Event{EventType:proto.UPDATE_NEXT_HOP, Params:pm2}
 		util.Send(anonCoordinator.Socket, lastServer, util.Encode(event2))
 	}
 
@@ -119,7 +122,7 @@ func handleServerRegister() {
 		"reply": true,
 		"prev_server": lastServer.String(),
 	}
-	event1 := &proto.Event{proto.SERVER_REGISTER_REPLY,pm1}
+	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
 	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event1))
 
 	anonCoordinator.AddServer(srcAddr);
@@ -139,7 +142,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 		"public_key": params["public_key"],
 		"addr": srcAddr.String(),
 	}
-	event := &proto.Event{proto.CLIENT_REGISTER_SERVERSIDE,pm}
+	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonCoordinator.Socket,firstServer,util.Encode(event))
 }
 
@@ -154,7 +157,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	addr,err := net.ResolveUDPAddr("udp",addrStr)
 	util.CheckErr(err)
 	pm := map[string]interface{}{}
-	event := &proto.Event{proto.CLIENT_REGISTER_CONFIRMATION,pm}
+	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
 	util.Send(anonCoordinator.Socket,addr,util.Encode(event))
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
@@ -190,17 +193,17 @@ func handleMsg(params map[string]interface{}) {
 		"rep" : anonCoordinator.GetReputation(nym),
 		"msgID" : msgID,
 	}
-	event := &proto.Event{proto.MESSAGE,pm}
+	event := &proto.Event{EventType:proto.MESSAGE, Params:pm}
 
 	// send to all the clients
 	for _,val := range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket,val,util.Encode(event))
 	}
 	// send confirmation to msg sender
-	pm_msg := map[string]interface{}{
+	pmMsg := map[string]interface{}{
 		"reply" : true,
 	}
-	event1 := &proto.Event{proto.MSG_REPLY,pm_msg}
+	event1 := &proto.Event{EventType:proto.MSG_REPLY, Params:pmMsg}
 	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event1))
 }
 
@@ -225,7 +228,6 @@ func handleVote(params map[string]interface{}) {
 		pm = map[string]interface{}{
 			"reply" : false,
 		}
-		return
 	}else {
 		// avoid duplicate vote
 		// todo
@@ -245,7 +247,7 @@ func handleVote(params map[string]interface{}) {
 		}
 	}
 
-	event := &proto.Event{proto.VOTE_REPLY,pm}
+	event := &proto.Event{EventType:proto.VOTE_REPLY, Params:pm}
 	// send reply to the client
 	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event))
 }
@@ -265,7 +267,7 @@ func handleRoundEnd(params map[string]interface{}) {
 
 	// send user round-end message
 	pm := map[string]interface{} {}
-	event := &proto.Event{proto.ROUND_END,pm}
+	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 	for _,val := range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket,val,util.Encode(event))
 	}

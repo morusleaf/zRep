@@ -114,7 +114,7 @@ func handleRoundEnd(params map[string]interface{}) {
 			"keys" : byteNewKeys,
 			"vals" : byteNewVals,
 		}
-		event := &proto.Event{proto.ROUND_END,pm}
+		event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 		util.Send(anonServer.Socket,anonServer.PreviousHop,util.Encode(event))
 		// reset RoundKey and key map
 		anonServer.Roundkey = anonServer.Suite.Secret().Pick(random.Stream)
@@ -157,8 +157,8 @@ func handleRoundEnd(params map[string]interface{}) {
 		"shuffled":true,
 		"public_key" : bytePublicKey,
 	}
-	event := &proto.Event{proto.ROUND_END,pm}
-	util.Send(anonServer.Socket,anonServer.PreviousHop,util.Encode(event))
+	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
+	util.Send(anonServer.Socket,anonServer.PreviousHop,util.Encode(event)) 
 
 	// reset RoundKey and key map
 	anonServer.Roundkey = anonServer.Suite.Secret().Pick(random.Stream)
@@ -210,7 +210,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"public_key" : byteNewKey,
 		"addr" : params["addr"].(string),
 	}
-	event := &proto.Event{proto.CLIENT_REGISTER_SERVERSIDE,pm}
+	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonServer.Socket,anonServer.NextHop,util.Encode(event))
 	// add into key map
 	fmt.Println("[debug] Receive client register request... ")
@@ -268,7 +268,7 @@ func handleAnnouncement(params map[string]interface{}) {
 			"vals" : byteNewVals,
 			"g" : byteG,
 		}
-		event := &proto.Event{proto.ANNOUNCEMENT,pm}
+		event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 		util.Send(anonServer.Socket,anonServer.NextHop,util.Encode(event))
 		return
 	}
@@ -310,7 +310,7 @@ func handleAnnouncement(params map[string]interface{}) {
 		"public_key" : bytePublicKey,
 		"g" : byteG,
 	}
-	event := &proto.Event{proto.ANNOUNCEMENT,pm}
+	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 	util.Send(anonServer.Socket,anonServer.NextHop,util.Encode(event))
 }
 

@@ -3,9 +3,9 @@ import (
 
 
 	"fmt"
-	"util"
+	"./util"
 
-	"proto"
+	"./proto"
 	"encoding/gob"
 	"bytes"
 )
@@ -14,7 +14,7 @@ type Message struct {
 }
 
 
-func main() {
+func maintest() {
 	/*
 	suite1 := nist.NewAES128SHA256QR512()
 	l := make([]abstract.Point,1)
@@ -50,7 +50,7 @@ func main() {
 	pm := map[string]interface{}{
 		"keys" : arr,
 	}
-	event := &proto.Event{proto.ROUND_END,pm}
+	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 	data := util.Encode(event)
 	newEvent := &proto.Event{}
 	err := gob.NewDecoder(bytes.NewReader(data)).Decode(newEvent)

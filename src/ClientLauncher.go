@@ -29,7 +29,7 @@ func register() {
 	params := map[string]interface{}{
 		"public_key": bytePublicKey,
 	}
-	event := &proto.Event{proto.CLIENT_REGISTER_CONTROLLERSIDE,params}
+	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONTROLLERSIDE, Params:params}
 
 	util.SendToCoodinator(dissentClient.Socket,util.Encode(event))
 }
@@ -72,7 +72,7 @@ func sendSigRequest(text string, eventType int) {
 		"nym":byteNym,
 		"signature":sig,
 	}
-	event := &proto.Event{eventType,params}
+	event := &proto.Event{EventType:eventType, Params:params}
 	// send to coordinator
 	util.SendToCoodinator(dissentClient.Socket,util.Encode(event))
 }
@@ -106,11 +106,19 @@ func initServer() {
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
-	dissentClient = &client.DissentClient{ServerAddr,nil,client.CONFIGURATION,suite,a,A,suite.Point(),nil}
+	dissentClient = &client.DissentClient{
+		CoordinatorAddr: ServerAddr,
+		Socket: nil,
+		Status: client.CONFIGURATION,
+		Suite: suite,
+		PrivateKey: a,
+		PublicKey: A,
+		OnetimePseudoNym: suite.Point(),
+		G: nil}
 }
 
 
-func main() {
+func launchClient() {
 	// initialize parameters and server configurations
 	initServer()
 	fmt.Println("[debug] Client started...");

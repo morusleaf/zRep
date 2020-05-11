@@ -44,10 +44,22 @@ func initCoordinator() {
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 
-	anonCoordinator = &coordinator.Coordinator{ServerAddr,nil,nil,
-		coordinator.CONFIGURATION,suite,a,A,nil, make(map[string]*net.UDPAddr),
-		make(map[string]abstract.Point), make(map[string][]byte), nil, nil,
-		make(map[string]int),make(map[string]abstract.Point)}
+	anonCoordinator = &coordinator.Coordinator{
+		LocalAddr: ServerAddr,
+		Socket: nil,
+		ServerList: nil,
+		Status: coordinator.CONFIGURATION,
+		Suite: suite,
+		PrivateKey: a,
+		PublicKey: A,
+		G: nil,
+		Clients: make(map[string]*net.UDPAddr),
+		ReputationKeyMap: make(map[string]abstract.Point),
+		ReputationMap: make(map[string][]byte),
+		NewClientsBuffer: nil,
+		MsgLog: nil,
+		DecryptedReputationMap: make(map[string]int),
+		DecryptedKeysMap: make(map[string]abstract.Point)}
 }
 
 
@@ -87,7 +99,7 @@ func announce() {
 		"keys" : byteKeys,
 		"vals" : byteVals,
 	}
-	event := &proto.Event{proto.ANNOUNCEMENT,params}
+	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:params}
 	util.Send(anonCoordinator.Socket,firstServer,util.Encode(event))
 }
 
@@ -123,7 +135,7 @@ func roundEnd() {
 		"vals" : vals,
 		"is_start" : true,
 	}
-	event := &proto.Event{proto.ROUND_END,pm}
+	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 	util.Send(anonCoordinator.Socket,lastServer,util.Encode(event))
 
 }
@@ -135,14 +147,14 @@ func roundEnd() {
  */
 func vote() {
 	pm := map[string]interface{} {}
-	event := &proto.Event{proto.VOTE,pm}
+	event := &proto.Event{EventType:proto.VOTE, Params:pm}
 	for _, val :=  range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket, val, util.Encode(event))
 	}
 }
 
 
-func main() {
+func launchCoordinator() {
 	// init coordinator
 	initCoordinator()
 	// bind to socket
