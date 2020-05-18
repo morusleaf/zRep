@@ -18,10 +18,10 @@ func TestCreation(t *testing.T) {
 }
 
 func TestNonneg(t *testing.T) {
-	base := createBase()
+	base, p, q := createBase()
 	x := new(big.Int).SetInt64(100)
-	commitx, rc := base.Commit(x)
-	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := base.ProveNonneg(x, commitx, rc)
+	commitx, rc := base.Commit(x, p, q)
+	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := base.ProveNonneg(x, commitx, rc, p, q)
 	res := base.VerifyNonneg(commitx, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
 	if !res {
 		t.Error("Verification failed")

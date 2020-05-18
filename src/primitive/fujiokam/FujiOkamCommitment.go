@@ -18,16 +18,22 @@ type FujiOkamBase struct {
 	G6 *Point
 	H1 *Point
 	N *big.Int
+	RandomRadius *big.Int
+	RandomDiameter *big.Int
 }
 
-// genGn returns a random gn from <H1>
-func (base *FujiOkamBase) genGn(p, q, pq *big.Int) *Point {
-	// (alpha, p) = 1 and (alpha, q) = 1 and alpha != 1
-	var alpha *big.Int = nil
+// genRandomSecret returns a random int from -RandomRadius ~ RandomRadius,
+// and it has be in Z*_{p*q}
+func (base *FujiOkamBase) genRandomSecret(p, q *big.Int) *big.Int {
+	pq := new(big.Int).Mul(p, q)
+	var s *big.Int = nil
 	modp := new(big.Int)
 	modq := new(big.Int)
 	for {
-		alpha = random.Int(pq, random.Stream)
+		s = random.Int(base.RandomDiameter, random.Stream)
+		s.Sub(s, base.RandomRadius)
+		alpha := new(big.Int).Mod(s, pq)
+		// (alpha, p) = 1 and (alpha, q) = 1 and alpha != 1
 		if alpha.Cmp(bigOne) == 0 {
 			continue
 		}
@@ -41,10 +47,17 @@ func (base *FujiOkamBase) genGn(p, q, pq *big.Int) *Point {
 		}
 		break
 	}
+	return s
+}
+
+// genGn returns a random gn from <H1>
+func (base *FujiOkamBase) genGn(p, q *big.Int) *Point {
+	alpha := base.genRandomSecret(p, q)
 	Gn := base.Point().Exp(base.H1, alpha)
 	return Gn
 }
 
+// genH returns a random int from Z*_n
 func (base *FujiOkamBase) genH(p, q *big.Int) *Point {
 	dpPlusOne := new(big.Int).Add(p, p)
 	dpPlusOne.Add(dpPlusOne, bigOne)
@@ -72,28 +85,31 @@ func (base *FujiOkamBase) genH(p, q *big.Int) *Point {
 	return H1
 }
 
-func createBase() *FujiOkamBase {
+func createBase() (*FujiOkamBase, *big.Int, *big.Int) {
 	suite := nist.NewAES128SHA256QR512()
 	p := new(big.Int).SetInt64(3)
 	q := new(big.Int).SetInt64(5)
-	pq := new(big.Int).Mul(p, q)
 	// n := (2p + 1) * (2q + 1)
 	n := new(big.Int).SetInt64(77)
 	base := &FujiOkamBase {
 		Suite : suite,
 		N : n}
 
-	// h1 := random ^ 2 mod n
-	H1 := base.genH(p, q)
+	randomRadius, _ := new(big.Int).SetString("10000", 16)
+	randomRadius.Mul(randomRadius, base.N)
+	randomDiameter := new(big.Int).Mul(randomRadius, bigTwo)
+	base.RandomRadius = randomRadius
+	base.RandomDiameter = randomDiameter
+	
+	base.H1 = base.genH(p, q)
+	base.G1 = base.genGn(p, q)
+	base.G2 = base.genGn(p, q)
+	base.G3 = base.genGn(p, q)
+	base.G4 = base.genGn(p, q)
+	base.G5 = base.genGn(p, q)
+	base.G6 = base.genGn(p, q)
 
-	base.H1 = H1
-	base.G1 = base.genGn(p, q, pq)
-	base.G2 = base.genGn(p, q, pq)
-	base.G3 = base.genGn(p, q, pq)
-	base.G4 = base.genGn(p, q, pq)
-	base.G5 = base.genGn(p, q, pq)
-	base.G6 = base.genGn(p, q, pq)
-	return base
+	return base, p, q
 }
 
 // Decompose 4x+1 into sum of three squares.
@@ -194,23 +210,23 @@ func (p *Point) Exp(a *Point, s *big.Int) *Point {
 	return p
 }
 
-func (base *FujiOkamBase) Commit(x *big.Int) (*Point, *big.Int) {
-	r := random.Int(bigRange, random.Stream)
+func (base *FujiOkamBase) Commit(x, p, q *big.Int) (*Point, *big.Int) {
+	r := base.genRandomSecret(p, q)
 	commitx := base.Point().Exp(base.G1, x)
 	tp := base.Point().Exp(base.H1, r)
 	commitx.Mul(commitx, tp)
 	return commitx, r
 }
 
-func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (*Point, *Point, *Point, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int) {
+func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int, p, q *big.Int) (*Point, *Point, *Point, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int) {
 	a, b, d := decomposeThreeSquare(x)
 	ti := new(big.Int)
 	tp := base.Point()
 	// rx, ra, rb, rd := random
-	rx := random.Int(bigRange, random.Stream)
-	ra := random.Int(bigRange, random.Stream)
-	rb := random.Int(bigRange, random.Stream)
-	rd := random.Int(bigRange, random.Stream)
+	rx := base.genRandomSecret(p, q)
+	ra := base.genRandomSecret(p, q)
+	rb := base.genRandomSecret(p, q)
+	rd := base.genRandomSecret(p, q)
 	// delta := 4*rx - 2*a*ra - 2*b*rb - 2*d*rd
 	delta := new(big.Int)
 	delta.Mul(bigFour, rx)
@@ -221,7 +237,7 @@ func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (
 	ti.Mul(bigTwo, d).Mul(ti, rd)
 	delta.Sub(delta, ti)
 	// r := random
-	r := random.Int(bigRange, random.Stream)
+	r := base.genRandomSecret(p, q)
 	// C := g2^x * g3^a * g4^b * g5^d * g6^delta * h^r (mod n)
 	C := base.Point()
 	C.Exp(base.G2, x)
@@ -236,7 +252,7 @@ func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (
 	tp.Exp(base.H1, r)
 	C.Mul(C, tp)
 	// rr := random
-	rr := random.Int(bigRange, random.Stream)
+	rr := base.genRandomSecret(p, q)
 	// Cr := g2^rx * g3^rx * g3^ra * g4^rb * g5^rd * g6^(-ra^2-rb^2-rd^2) * h^rr (mod n)
 	Cr := base.Point()
 	Cr.Exp(base.G2, rx)
@@ -260,7 +276,7 @@ func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (
 	ti.SetInt64(-1)
 	tp.Exp(base.G6, ti)
 	// commitrx = g^rx * h^rrx (mod n)
-	commitrx, rrx := base.Commit(rx)
+	commitrx, rrx := base.Commit(rx, p, q)
 	// e = hash(commitx, C, Cr)
 	h := sha256.New()
 	h.Write(commitx.V.Bytes())
