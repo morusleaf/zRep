@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"math/big"
 	"../primitive/fujiokam"
-	"github.com/dedis/crypto/abstract"
+	// "github.com/dedis/crypto/abstract"
 )
 
 func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
@@ -50,6 +50,8 @@ func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 // print out register success info
 func handleRegisterConfirmation(params map[string]interface{}, dissentClient *DissentClient) {
 	dissentClient.Status = CONNECTED
+
+	// Fujisaki-Okamoto
 	N := new(big.Int).SetBytes(params["n"].([]byte))
 	base := fujiokam.CreateMinimumBase(dissentClient.Suite, N)
 	base.G1 = base.Point().FromBinary(params["g1"].([]byte))
@@ -60,6 +62,14 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	base.G6 = base.Point().FromBinary(params["g6"].([]byte))
 	base.H1 = base.Point().FromBinary(params["h1"].([]byte))
 	dissentClient.FujiOkamBase = base
+
+	// Pedersen
+	var H = dissentClient.Suite.Point()
+	byteH := params["h"].([]byte)
+	err := H.UnmarshalBinary(byteH)
+	util.CheckErr(err)
+	dissentClient.PedersenBase.H = H
+
 	// simply print out register success info here
 	fmt.Println("[client] Register success. Waiting for new round begin...");
 }
@@ -75,24 +85,13 @@ func handleVotePhaseStart(dissentClient *DissentClient) {
 	fmt.Print("cmd >> ")
 }
 
-func findMyDiff(keyList []abstract.Point, diffList []int, myKey abstract.Point) int {
-	for i, k := range keyList {
-		if myKey.Equal(k) {
-			fmt.Println(myKey, k)
-			return diffList[i]
-		}
-	}
-	// if client has not joined last round, then her key will not showup in keyList
-	return 0
-}
-
 // reset the status and prepare for the new round
 func handleRoundEnd(params map[string]interface{}, dissentClient *DissentClient) {
 	dissentClient.Status = CONNECTED
 
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	diffList:= util.DecodeIntArray(params["diffs"].([]byte))
-	myDiff := findMyDiff(keyList, diffList, dissentClient.OnetimePseudoNym)
+	myDiff := util.FindIntUsingKeyList(keyList, diffList, dissentClient.OnetimePseudoNym)
 	dissentClient.Reputation += myDiff
 	fmt.Println("my new reputation:", dissentClient.Reputation)
 
@@ -127,9 +126,17 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 	// set One-time pseudonym and g
 	g := dissentClient.Suite.Point()
 	// deserialize g and calculate nym
-
 	g.UnmarshalBinary(params["g"].([]byte))
 	nym := dissentClient.Suite.Point().Mul(g,dissentClient.PrivateKey)
+
+	// update PComm
+	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
+	valList:= util.ProtobufDecodePointList(params["vals"].([]byte))
+	dissentClient.PCommr = util.FindPointUsingKeyList(keyList, valList, nym)
+	if dissentClient.PCommr == nil {
+		panic(1)
+	}
+
 	// set client's parameters
 	dissentClient.Status = MESSAGE
 	dissentClient.G = g

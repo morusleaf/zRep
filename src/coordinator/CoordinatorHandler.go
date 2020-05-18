@@ -86,9 +86,11 @@ func handleAnnouncement(params map[string]interface{}) {
 		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i])
 	}
 
-	// distribute g and hash table of ids to user
+	// distribute g and table to user
 	pm := map[string]interface{}{
 		"g": params["g"].([]byte),
+		"keys": params["keys"].([]byte),
+		"vals": params["vals"].([]byte),
 	}
 
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
@@ -168,6 +170,10 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	err := PComm.UnmarshalBinary(bytePComm)
 	util.CheckErr(err)
 
+	// encode h from Pedersen Commitment base
+	byteH, err := anonCoordinator.PedersenBase.H.MarshalBinary()
+	util.CheckErr(err)
+
 	var addrStr = params["addr"].(string)
 	addr,err := net.ResolveUDPAddr("udp", addrStr)
 	util.CheckErr(err)
@@ -181,6 +187,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"g5": fujiokamBase.G5.ToBinary(),
 		"g6": fujiokamBase.G6.ToBinary(),
 		"h1": fujiokamBase.H1.ToBinary(),
+		"h": byteH,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
 	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
@@ -200,8 +207,8 @@ func handleMsg(params map[string]interface{}) {
 	util.CheckErr(err)
 
 	fmt.Println("[debug] Receiving msg from " + srcAddr.String() + ": " + text)
-	// verify the identification of the client
 
+	// verify the identification of the client
 	byteText := []byte(text)
 	err = util.ElGamalVerify(anonCoordinator.Suite, byteText, nym, byteSig, anonCoordinator.G)
 	if err != nil {
@@ -209,12 +216,33 @@ func handleMsg(params map[string]interface{}) {
 		return
 	}
 
+	// PComm for d
+	PCommind := anonCoordinator.Suite.Point()
+	err = PCommind.UnmarshalBinary(params["PCommind"].([]byte))
+	util.CheckErr(err)
+	PCommd := anonCoordinator.Suite.Point()
+	err = PCommd.UnmarshalBinary(params["PCommd"].([]byte))
+	util.CheckErr(err)
+	pedersenBase := anonCoordinator.PedersenBase
+	PCommr := anonCoordinator.EndingMap[nym.String()]
+	myPCommd := pedersenBase.Sub(PCommr, PCommind)
+	if !PCommd.Equal(myPCommd) {
+		fmt.Println("[note]** PCommd != PCoomind^-1 * PCommr (mod p)")
+		return
+	}
+	fmt.Println("[debug] PComm check passed")
+
+	// FOComm for d
 	fujiokamBase := anonCoordinator.FujiOkamBase
 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
 	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
 	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
 	res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg)
-	fmt.Println("verify result:", res)
+	if res != true {
+		fmt.Println("[note]** Non-negative verification failed")
+		return
+	}
+	fmt.Println("[debug] FOComm check passed")
 
 	// add msg log
 	msgID := anonCoordinator.AddMsgLog(nym)

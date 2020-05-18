@@ -110,7 +110,7 @@ func announce() {
 		anonCoordinator.Status = coordinator.MESSAGE
 		return
 	}
-	// construct reputation list (public & encrypted reputation)
+	// construct reputation list (public keys & reputation commitments)
 	size := len(anonCoordinator.BeginningMap)
 	keys := make([]abstract.Point,size)
 	vals := make([]abstract.Point,size)
@@ -127,7 +127,7 @@ func announce() {
 		"vals" : byteVals,
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:params}
-	util.Send(anonCoordinator.Socket,firstServer,util.Encode(event))
+	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
 }
 
 /**

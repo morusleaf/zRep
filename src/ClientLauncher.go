@@ -15,6 +15,7 @@ import (
 	"log"
 	"time"
 	"math/big"
+	"./primitive/pedersen"
 )
 
 // pointer to client itself
@@ -58,11 +59,24 @@ func sendMsg(ind int, text string) {
 		return
 	}
 	d := dissentClient.Reputation - ind
+	bigD := new(big.Int).SetInt64(int64(d))
+
+	// compute PComm for d
+	PCommr := dissentClient.PCommr
+	fmt.Println("PCommr", PCommr)
+	xind := dissentClient.Suite.Secret().SetInt64(int64(ind))
+	PCommind, rind := dissentClient.PedersenBase.Commit(xind)
+	PCommd := dissentClient.PedersenBase.Sub(PCommr, PCommind)
+	bytePCommind, err := PCommind.MarshalBinary()
+	util.CheckErr(err)
+	bytePCommd, err := PCommd.MarshalBinary()
+	util.CheckErr(err)
+	byteRind, err := rind.MarshalBinary()
+	util.CheckErr(err)
 
 	// generate ARGnonneg
-	bigD := new(big.Int).SetInt64(int64(d))
-	FOCommd, rc := dissentClient.FujiOkamBase.Commit(bigD)
-	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rc)
+	FOCommd, rFO := dissentClient.FujiOkamBase.Commit(bigD)
+	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFO)
 
 	// generate signature
 	rand := dissentClient.Suite.Cipher([]byte("example"))
@@ -76,6 +90,9 @@ func sendMsg(ind int, text string) {
 		"nym": byteNym,
 		"signature": sig,
 		"FOCommd": FOCommd.ToBinary(),
+		"PCommd": bytePCommd,
+		"PCommind": bytePCommind,
+		"rind": byteRind,
 		"arg_nonneg": util.EncodeARGnonneg(ARGnonneg),
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
@@ -137,6 +154,7 @@ func initServer() {
 		G: nil,
 		Reputation: 0,
 		FujiOkamBase: nil,
+		PedersenBase: pedersen.CreateBaseFromSuite(suite),
 	}
 }
 

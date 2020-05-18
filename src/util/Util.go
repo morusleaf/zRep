@@ -131,6 +131,25 @@ func IntToByte(n int) []byte {
 	return buf
 }
 
+func FindPointUsingKeyList(keyList, valList []abstract.Point, nym abstract.Point) abstract.Point {
+	for i, k := range keyList {
+		if nym.Equal(k) {
+			return valList[i]
+		}
+	}
+	return nil
+}
+
+func FindIntUsingKeyList(keyList []abstract.Point, diffList []int, nym abstract.Point) int {
+	for i, k := range keyList {
+		if nym.Equal(k) {
+			return diffList[i]
+		}
+	}
+	// if client has not joined last round, then her key will not showup in keyList
+	return 0
+}
+
 // crypto
 
 // A basic, verifiable signature

@@ -3,6 +3,7 @@ import (
 	"github.com/dedis/crypto/abstract"
 	"net"
 	"../primitive/fujiokam"
+	"../primitive/pedersen"
 )
 
 
@@ -21,5 +22,7 @@ type DissentClient struct {
 	G abstract.Point
 	Reputation int
 
+	PCommr abstract.Point
 	FujiOkamBase *fujiokam.FujiOkamBase
+	PedersenBase *pedersen.PedersenBase
 }
