@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"math"
 	"crypto/sha256"
-	"fmt"
 )
 
 type FujiOkamBase struct {
@@ -394,7 +393,6 @@ func (base *FujiOkamBase) VerifyNonnegHelper(commitx, commitrx, C, Cr *Point, R,
 	delta_.Sub(delta_, ti)
 	ti.Mul(d_, d_)
 	delta_.Sub(delta_, ti)
-	fmt.Println("delta_", delta_)
 
 	// Lside := C^e * Cr (mod n)
 	Lside := base.Point()
@@ -413,8 +411,6 @@ func (base *FujiOkamBase) VerifyNonnegHelper(commitx, commitrx, C, Cr *Point, R,
 	Rside.Mul(Rside, tp)
 	tp.Exp(base.H1, r_)
 	Rside.Mul(Rside, tp)
-	fmt.Println("Lside", Lside)
-	fmt.Println("Rside", Rside)
 	// check Lside == Rside
 	if !Lside.Equal(Rside) {
 		return false
@@ -427,8 +423,6 @@ func (base *FujiOkamBase) VerifyNonnegHelper(commitx, commitrx, C, Cr *Point, R,
 	Rside.Exp(base.G1, x_)
 	tp.Exp(base.H1, R)
 	Rside.Mul(Rside, tp)
-	fmt.Println("Lside", Lside)
-	fmt.Println("Rside", Rside)
 	// check Lside == Rside
 	if !Lside.Equal(Rside) {
 		return false

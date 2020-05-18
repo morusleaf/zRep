@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"math/big"
 	"../primitive/fujiokam"
+	"github.com/dedis/crypto/abstract"
 )
 
 func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
@@ -30,7 +31,7 @@ func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 		handleVotePhaseStart(dissentClient)
 		break
 	case proto.ROUND_END:
-		handleRoundEnd(dissentClient)
+		handleRoundEnd(event.Params, dissentClient)
 		break
 	case proto.VOTE_REPLY:
 		handleVoteReply(event.Params)
@@ -74,9 +75,27 @@ func handleVotePhaseStart(dissentClient *DissentClient) {
 	fmt.Print("cmd >> ")
 }
 
+func findMyDiff(keyList []abstract.Point, diffList []int, myKey abstract.Point) int {
+	for i, k := range keyList {
+		if myKey.Equal(k) {
+			fmt.Println(myKey, k)
+			return diffList[i]
+		}
+	}
+	// if client has not joined last round, then her key will not showup in keyList
+	return 0
+}
+
 // reset the status and prepare for the new round
-func handleRoundEnd(dissentClient *DissentClient) {
+func handleRoundEnd(params map[string]interface{}, dissentClient *DissentClient) {
 	dissentClient.Status = CONNECTED
+
+	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
+	diffList:= util.DecodeIntArray(params["diffs"].([]byte))
+	myDiff := findMyDiff(keyList, diffList, dissentClient.OnetimePseudoNym)
+	dissentClient.Reputation += myDiff
+	fmt.Println("my new reputation:", dissentClient.Reputation)
+
 	fmt.Println()
 	fmt.Println("[client] Round ended. Waiting for new round start...");
 }
@@ -119,7 +138,8 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 	// print out the msg to suggest user to send msg or vote
 	fmt.Println("[client] One-Time pseudonym for this round is ");
 	fmt.Println(nym);
-	fmt.Println("[client] Messaging Phase begins.(msg <msg_text>)");
+	fmt.Println("[client] My reputation is", dissentClient.Reputation)
+	fmt.Println("[client] Messaging Phase begins.(msg <indicator> <msg_text>)");
 	fmt.Print("cmd >> ");
 }
 

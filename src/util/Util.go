@@ -54,6 +54,27 @@ func CheckErr(err error) {
 	}
 }
 
+func EncodeIntArray(arr []int) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(arr)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func DecodeIntArray(data []byte) []int {
+	var arr []int
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(&arr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return arr
+}
+
 func EncodeARGnonneg(arg *fujiokam.ARGnonneg) []byte {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)

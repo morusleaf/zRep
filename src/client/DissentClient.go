@@ -19,6 +19,7 @@ type DissentClient struct {
 	PublicKey abstract.Point
 	OnetimePseudoNym abstract.Point
 	G abstract.Point
+	Reputation int
 
 	FujiOkamBase *fujiokam.FujiOkamBase
 }

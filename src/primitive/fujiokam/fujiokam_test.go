@@ -109,16 +109,18 @@ func TestEncodingARG(t *testing.T) {
 }
 
 func TestEncoding(t *testing.T) {
-	x := new(big.Int).SetInt64(0)
+	x := []int{0,1,2,3}
 	fmt.Println(x)
 	var network bytes.Buffer
 	encoder := gob.NewEncoder(&network)
 	err := encoder.Encode(x)
-	fmt.Println(err)
+	if err != nil {
+		t.Error(err)
+	}
 	fmt.Println(network.Bytes())
 
-	y := new(big.Int)
+	var y []int
 	decoder := gob.NewDecoder(&network)
-	decoder.Decode(y)
+	decoder.Decode(&y)
 	fmt.Println(y)
 }

@@ -53,18 +53,16 @@ func startClientListener() {
   * send message text to server
   */
 func sendMsg(ind int, text string) {
-	if ind < 0 { // XXX: should use (ind-rep) instead
-		fmt.Println("indicator should be non-neg")
+	if ind > dissentClient.Reputation {
+		fmt.Println("indicator should be less or equal than reputation")
 		return
 	}
+	d := dissentClient.Reputation - ind
 
 	// generate ARGnonneg
-	bigInd := new(big.Int).SetInt64(int64(ind))
-	FOCommd, rc := dissentClient.FujiOkamBase.Commit(bigInd)
-	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigInd, FOCommd, rc)
-	fmt.Println(ARGnonneg)
-	res := dissentClient.FujiOkamBase.VerifyNonneg(FOCommd, ARGnonneg)
-	fmt.Println("self verify:", res)
+	bigD := new(big.Int).SetInt64(int64(d))
+	FOCommd, rc := dissentClient.FujiOkamBase.Commit(bigD)
+	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rc)
 
 	// generate signature
 	rand := dissentClient.Suite.Cipher([]byte("example"))
@@ -84,27 +82,6 @@ func sendMsg(ind int, text string) {
 	// send to coordinator
 	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
 }
-
-/**
-  * send general request to server
-  * the request is encrypted by signature
-  */
-// func sendSigRequest(text string, eventType int) {
-// 	// generate signature
-// 	rand := dissentClient.Suite.Cipher([]byte("example"))
-// 	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
-// 	// serialize Point data structure
-// 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
-// 	// wrap params
-// 	params := map[string]interface{}{
-// 		"text": text,
-// 		"nym":byteNym,
-// 		"signature":sig,
-// 	}
-// 	event := &proto.Event{EventType:eventType, Params:params}
-// 	// send to coordinator
-// 	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
-// }
 
 /**
   * send vote to server
@@ -158,6 +135,7 @@ func initServer() {
 		PublicKey: A,
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
+		Reputation: 0,
 		FujiOkamBase: nil,
 	}
 }

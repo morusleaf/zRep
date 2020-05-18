@@ -212,7 +212,6 @@ func handleMsg(params map[string]interface{}) {
 	fujiokamBase := anonCoordinator.FujiOkamBase
 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
 	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
-	fmt.Println(ARGnonneg)
 	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
 	res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg)
 	fmt.Println("verify result:", res)
@@ -301,13 +300,26 @@ func handleRoundEnd(params map[string]interface{}) {
 		anonCoordinator.BeginningKeyMap[keyList[i].String()] = keyList[i]
 	}
 
+	size := len(anonCoordinator.ReputationDiffMap)
+	keys := make([]abstract.Point,size)
+	diffs := make([]int, size)
+	i := 0
+	for k, v := range anonCoordinator.ReputationDiffMap {
+		keys[i] = anonCoordinator.EndingKeyMap[k]
+		diffs[i] = v
+		i++
+	}
+	byteKeys := util.ProtobufEncodePointList(keys)
+	byteDiffs := util.EncodeIntArray(diffs)
 	// send user round-end message
-	pm := map[string]interface{} {}
+	pm := map[string]interface{} {
+		"keys": byteKeys,
+		"diffs": byteDiffs,
+	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-	for _,addr := range anonCoordinator.Clients {
+	for _, addr := range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 	}
 	time.Sleep(500 * time.Millisecond)
 	anonCoordinator.Status = READY_FOR_NEW_ROUND
 }
-
