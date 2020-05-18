@@ -58,12 +58,13 @@ func initCoordinator() {
 		PublicKey: A,
 		G: nil,
 		Clients: make(map[string]*net.UDPAddr),
-		ReputationKeyMap: make(map[string]abstract.Point),
-		ReputationMap: make(map[string]abstract.Point),
+		BeginningKeyMap: make(map[string]abstract.Point),
+		BeginningMap: make(map[string]abstract.Point),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
-		DecryptedReputationMap: make(map[string]abstract.Point),
-		DecryptedKeysMap: make(map[string]abstract.Point),
+		EndingMap: make(map[string]abstract.Point),
+		EndingKeyMap: make(map[string]abstract.Point),
+		ReputationDiffMap: make(map[string]int),
 		PedersenBase: pedersenBase,
 		FujiOkamBase: fujiokamBase,
 	}
@@ -110,12 +111,12 @@ func announce() {
 		return
 	}
 	// construct reputation list (public & encrypted reputation)
-	size := len(anonCoordinator.ReputationMap)
+	size := len(anonCoordinator.BeginningMap)
 	keys := make([]abstract.Point,size)
 	vals := make([]abstract.Point,size)
 	i := 0
-	for k, v := range anonCoordinator.ReputationMap {
-		keys[i] = anonCoordinator.ReputationKeyMap[k]
+	for k, v := range anonCoordinator.BeginningMap {
+		keys[i] = anonCoordinator.BeginningKeyMap[k]
 		vals[i] = v
 		i++
 	}
@@ -145,13 +146,17 @@ func roundEnd() {
 	}
 	// add previous clients into reputation map
 	// construct the parameters
-	size := len(anonCoordinator.DecryptedReputationMap)
+	size := len(anonCoordinator.EndingMap)
 	keys := make([]abstract.Point,size)
 	vals := make([]abstract.Point,size)
 	i := 0
-	for k, v := range anonCoordinator.DecryptedReputationMap {
-		keys[i] = anonCoordinator.DecryptedKeysMap[k]
-		vals[i] = v
+	for k, v := range anonCoordinator.EndingMap {
+		keys[i] = anonCoordinator.EndingKeyMap[k]
+		// update commitment by adding diff's commitment
+		diff := anonCoordinator.ReputationDiffMap[k]
+		diffSecret := anonCoordinator.Suite.Secret().SetInt64(int64(diff))
+		diffComm, _ := anonCoordinator.PedersenBase.Commit(diffSecret)
+		vals[i] = anonCoordinator.PedersenBase.Add(v, diffComm)
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)

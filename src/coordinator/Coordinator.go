@@ -34,16 +34,17 @@ type Coordinator struct {
 	// store client address
 	Clients map[string]*net.UDPAddr
 	// store reputation map
-	ReputationKeyMap map[string]abstract.Point
-	ReputationMap map[string]abstract.Point
+	BeginningKeyMap map[string]abstract.Point
+	BeginningMap map[string]abstract.Point
 	// we only add new clients at the beginning of each round
 	// store the new clients's one-time pseudo nym
 	NewClientsBuffer []ClientTuple
 	// msg sender's record nym
 	MsgLog []abstract.Point
 
-	DecryptedReputationMap map[string]abstract.Point
-	DecryptedKeysMap map[string]abstract.Point
+	EndingMap map[string]abstract.Point
+	ReputationDiffMap map[string]int
+	EndingKeyMap map[string]abstract.Point
 
 	PedersenBase *pedersen.PedersenBase
 	FujiOkamBase *fujiokam.FujiOkamBase
@@ -89,8 +90,8 @@ func (c *Coordinator) AddMsgLog(log abstract.Point) int{
 }
 
 // get reputation
-func (c *Coordinator) GetReputation(key abstract.Point) abstract.Point{
-	return c.DecryptedReputationMap[key.String()]
+func (c *Coordinator) GetReputationDiff(key abstract.Point) int{
+	return c.ReputationDiffMap[key.String()]
 }
 
 func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point) {
@@ -99,13 +100,13 @@ func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point
 
 func (c *Coordinator) AddIntoDecryptedMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
-	c.DecryptedKeysMap[keyStr] = key
-	c.DecryptedReputationMap[keyStr] = val
+	c.EndingKeyMap[keyStr] = key
+	c.EndingMap[keyStr] = val
 }
 
 func (c *Coordinator) AddIntoRepMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
-	c.ReputationKeyMap[keyStr] = key
-	c.ReputationMap[keyStr] = val
+	c.BeginningKeyMap[keyStr] = key
+	c.BeginningMap[keyStr] = val
 }
 

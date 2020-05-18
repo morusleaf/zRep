@@ -77,8 +77,9 @@ func handleAnnouncement(params map[string]interface{}) {
 	//construct Decrypted reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	anonCoordinator.DecryptedReputationMap = make(map[string]abstract.Point)
-	anonCoordinator.DecryptedKeysMap = make(map[string]abstract.Point)
+	anonCoordinator.EndingMap = make(map[string]abstract.Point)
+	anonCoordinator.EndingKeyMap = make(map[string]abstract.Point)
+	anonCoordinator.ReputationDiffMap = make(map[string]int)
 
 	for i := 0; i < len(keyList); i++ {
 		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i])
@@ -200,13 +201,13 @@ func handleMsg(params map[string]interface{}) {
 	msgID := anonCoordinator.AddMsgLog(nym)
 
 	// generate msg to clients
-	rep := anonCoordinator.GetReputation(nym)
-	byteRep, err := rep.MarshalBinary()
-	util.CheckErr(err)
+	// rep := anonCoordinator.GetReputation(nym)
+	// byteRep, err := rep.MarshalBinary()
+	// util.CheckErr(err)
 	pm := map[string]interface{}{
 		"text" : text,
 		"nym" : params["nym"].([]byte),
-		"rep" : byteRep,
+		// "rep" : byteRep,
 		"msgID" : msgID,
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:pm}
@@ -252,11 +253,10 @@ func handleVote(params map[string]interface{}) {
 		commands := strings.Split(text,";")
 		// modify the reputation
 		msgID, _ := strconv.Atoi(commands[0])
-		// vote, _ := strconv.Atoi(commands[1])
+		vote, _ := strconv.Atoi(commands[1])
 		targetNym := anonCoordinator.MsgLog[msgID-1]
 
-		anonCoordinator.DecryptedReputationMap[targetNym.String()] =
-					anonCoordinator.DecryptedReputationMap[targetNym.String()] //+ vote
+		anonCoordinator.ReputationDiffMap[targetNym.String()] += vote
 		// generate reply msg to client
 		pm = map[string]interface{}{
 			"reply" : true,
@@ -274,11 +274,11 @@ func handleRoundEnd(params map[string]interface{}) {
 	// review reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	anonCoordinator.ReputationMap = make(map[string]abstract.Point)
-	anonCoordinator.ReputationKeyMap = make(map[string]abstract.Point)
+	anonCoordinator.BeginningMap = make(map[string]abstract.Point)
+	anonCoordinator.BeginningKeyMap = make(map[string]abstract.Point)
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.ReputationMap[keyList[i].String()] = valList[i]
-		anonCoordinator.ReputationKeyMap[keyList[i].String()] = keyList[i]
+		anonCoordinator.BeginningMap[keyList[i].String()] = valList[i]
+		anonCoordinator.BeginningKeyMap[keyList[i].String()] = keyList[i]
 	}
 
 	// send user round-end message
