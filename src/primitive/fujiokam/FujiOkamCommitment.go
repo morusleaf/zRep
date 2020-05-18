@@ -54,7 +54,7 @@ func (base *FujiOkamBase) genRandomSecret() *big.Int {
 	// }
 	// return s
 	s := random.Int(base.RandomDiameter, random.Stream)
-	// s.Sub(s, base.RandomRadius)
+	s.Sub(s, base.RandomRadius)
 	return s
 }
 
@@ -365,6 +365,13 @@ func (base *FujiOkamBase) ProveNonnegHelper(x *big.Int, commitx *Point, rc *big.
 	R := new(big.Int)
 	R.Mul(e, rc).Add(R, rrx)
 	return commitrx, C, Cr, R, x_, a_, b_, d_, r_
+}
+
+func (base *FujiOkamBase) VerifyNonneg(commitx *Point, arg *ARGnonneg) bool {
+	commitrx := base.Point().BigInt(arg.Commitrx)
+	C := base.Point().BigInt(arg.C)
+	Cr := base.Point().BigInt(arg.Cr)
+	return base.VerifyNonnegHelper(commitx, commitrx, C, Cr, arg.R, arg.X_, arg.A_, arg.B_, arg.D_, arg.R_)
 }
 
 func (base *FujiOkamBase) VerifyNonnegHelper(commitx, commitrx, C, Cr *Point, R, x_, a_, b_, d_, r_ *big.Int) bool {

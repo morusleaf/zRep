@@ -54,17 +54,22 @@ func CheckErr(err error) {
 	}
 }
 
-func ProtobufEncodeARGnonneg(arg *fujiokam.ARGnonneg) []byte {
-	data, err := protobuf.Encode(arg)
+func EncodeARGnonneg(arg *fujiokam.ARGnonneg) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(arg)
 	if err != nil {
 		panic(err.Error())
 	}
-	return data
+	return buf.Bytes()
 }
 
-func ProtobufDecodeARGnonneg(bytes []byte) *fujiokam.ARGnonneg {
+func DecodeARGnonneg(data []byte) *fujiokam.ARGnonneg {
 	arg := new(fujiokam.ARGnonneg)
-	if err := protobuf.Decode(bytes, arg); err != nil {
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(arg)
+	if err != nil {
 		log.Fatal(err)
 	}
 	return arg

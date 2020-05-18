@@ -211,21 +211,10 @@ func handleMsg(params map[string]interface{}) {
 
 	fujiokamBase := anonCoordinator.FujiOkamBase
 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
-	commitrxV := new(big.Int).SetBytes(params["commitrx"].([]byte))
-	CV := new(big.Int).SetBytes(params["C"].([]byte))
-	CrV := new(big.Int).SetBytes(params["Cr"].([]byte))
-	R := new(big.Int).SetBytes(params["R"].([]byte))
-	x_ := new(big.Int).SetBytes(params["x_"].([]byte))
-	a_ := new(big.Int).SetBytes(params["a_"].([]byte))
-	b_ := new(big.Int).SetBytes(params["b_"].([]byte))
-	d_ := new(big.Int).SetBytes(params["d_"].([]byte))
-	r_ := new(big.Int).SetBytes(params["r_"].([]byte))
-	fmt.Println(commitrxV, CV, CrV, R, x_, a_, b_, d_, r_)
+	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
+	fmt.Println(ARGnonneg)
 	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
-	commitrx := fujiokamBase.Point().BigInt(commitrxV)
-	C := fujiokamBase.Point().BigInt(CV)
-	Cr := fujiokamBase.Point().BigInt(CrV)
-	res := fujiokamBase.VerifyNonnegHelper(FOCommd, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
+	res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg)
 	fmt.Println("verify result:", res)
 
 	// add msg log

@@ -61,9 +61,9 @@ func sendMsg(ind int, text string) {
 	// generate ARGnonneg
 	bigInd := new(big.Int).SetInt64(int64(ind))
 	FOCommd, rc := dissentClient.FujiOkamBase.Commit(bigInd)
-	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := dissentClient.FujiOkamBase.ProveNonnegHelper(bigInd, FOCommd, rc)
-	fmt.Println(commitrx, C, Cr, R, x_, a_, b_, d_, r_)
-	res := dissentClient.FujiOkamBase.VerifyNonnegHelper(FOCommd, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
+	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigInd, FOCommd, rc)
+	fmt.Println(ARGnonneg)
+	res := dissentClient.FujiOkamBase.VerifyNonneg(FOCommd, ARGnonneg)
 	fmt.Println("self verify:", res)
 
 	// generate signature
@@ -78,15 +78,7 @@ func sendMsg(ind int, text string) {
 		"nym": byteNym,
 		"signature": sig,
 		"FOCommd": FOCommd.ToBinary(),
-		"commitrx": commitrx.ToBinary(),
-		"C": C.ToBinary(),
-		"Cr": Cr.ToBinary(),
-		"R": R.Bytes(),
-		"x_": x_.Bytes(),
-		"a_": a_.Bytes(),
-		"b_": b_.Bytes(),
-		"d_": d_.Bytes(),
-		"r_": r_.Bytes(),
+		"arg_nonneg": util.EncodeARGnonneg(ARGnonneg),
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
 	// send to coordinator
