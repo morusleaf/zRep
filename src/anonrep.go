@@ -20,6 +20,6 @@ func main() {
 			launchCoordinator()
 		}
 	}else {
-		launchCoordinator()
+		test()
 	}
 }
