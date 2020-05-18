@@ -30,4 +30,5 @@ const ROUND_END = 12
 const VOTE_REPLY = 13
 // return msg status event
 const MSG_REPLY = 14
-
+// broadcast h for Pedersen Commitment
+const BCAST_PEDERSEN_H = 15

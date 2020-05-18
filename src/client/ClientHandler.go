@@ -114,11 +114,15 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 // receive the One-time pseudonym, reputation, and msg from server side
 func handleMsg(params map[string]interface{}, dissentClient *DissentClient) {
 	// get the reputation
-	rep := params["rep"].(int)
+	byteRep := params["rep"].([]byte)
+	rep := dissentClient.Suite.Point()
+	err := rep.UnmarshalBinary(byteRep)
+	util.CheckErr(err)
 	// get One-time pseudonym
 	byteNym := params["nym"].([]byte)
 	nym := dissentClient.Suite.Point()
-	nym.UnmarshalBinary(byteNym)
+	err = nym.UnmarshalBinary(byteNym)
+	util.CheckErr(err)
 	// get msg text
 	text := params["text"].(string)
 	// get msg id
@@ -129,11 +133,10 @@ func handleMsg(params map[string]interface{}, dissentClient *DissentClient) {
 	}
 	// print out message in client side
 	fmt.Println()
-	fmt.Print("Message from ")
-	fmt.Print(nym)
-	fmt.Println(" (reputation: " + strconv.Itoa(rep) + ")");
+	fmt.Println("Message from ", nym)
+	fmt.Println("Reputation commitment: ", rep);
 	fmt.Println("Message ID: " + strconv.Itoa(msgID));
-	fmt.Println("Messafe Text: " + text);
+	fmt.Println("Message Text: " + text);
 	fmt.Println();
 	fmt.Print("cmd >> ")
 }

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 	"github.com/dedis/crypto/abstract"
+	// "../primitive/fujiokam"
 )
 
 var anonCoordinator *Coordinator
@@ -75,13 +76,12 @@ func handleAnnouncement(params map[string]interface{}) {
 
 	//construct Decrypted reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
-	valList := params["vals"].([]util.ByteArray)
-	anonCoordinator.DecryptedReputationMap = make(map[string]int)
+	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	anonCoordinator.DecryptedReputationMap = make(map[string]abstract.Point)
 	anonCoordinator.DecryptedKeysMap = make(map[string]abstract.Point)
 
 	for i := 0; i < len(keyList); i++ {
-		val := util.ByteToInt(valList[i].Arr)
-		anonCoordinator.AddIntoDecryptedMap(keyList[i],val)
+		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i])
 	}
 
 	// distribute g and hash table of ids to user
@@ -90,8 +90,8 @@ func handleAnnouncement(params map[string]interface{}) {
 	}
 
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
-	for _,val := range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket,val,util.Encode(event))
+	for _,addr := range anonCoordinator.Clients {
+		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 	}
 
 	// set controller's new g
@@ -136,11 +136,18 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 	publicKey.UnmarshalBinary(params["public_key"].([]byte))
 	anonCoordinator.AddClient(publicKey,srcAddr)
 
+	// compute Pedersen commitment
+	xInit := anonCoordinator.Suite.Secret().SetInt64(0)
+	PComm, _ := anonCoordinator.PedersenBase.Commit(xInit)
+	bytePComm, err := PComm.MarshalBinary()
+	util.CheckErr(err)
+
 	// send register info to the first server
 	firstServer := anonCoordinator.GetFirstServer()
 	pm := map[string]interface{}{
 		"public_key": params["public_key"],
 		"addr": srcAddr.String(),
+		"pcomm": bytePComm,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonCoordinator.Socket,firstServer,util.Encode(event))
@@ -149,9 +156,15 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 // handle client register successful event
 func handleClientRegisterServerSide(params map[string]interface{}) {
 	// get public key from params (it's one-time nym actually)
-	var publicKey = anonCoordinator.Suite.Point()
-	bytePublicKey := params["public_key"].([]byte)
-	publicKey.UnmarshalBinary(bytePublicKey)
+	var nym = anonCoordinator.Suite.Point()
+	byteNym := params["public_key"].([]byte)
+	nym.UnmarshalBinary(byteNym)
+
+	// get PComm from params (encrypted by all servers)
+	var PComm = anonCoordinator.Suite.Point()
+	bytePComm := params["pcomm"].([]byte)
+	err := PComm.UnmarshalBinary(bytePComm)
+	util.CheckErr(err)
 
 	var addrStr = params["addr"].(string)
 	addr,err := net.ResolveUDPAddr("udp",addrStr)
@@ -161,7 +174,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	util.Send(anonCoordinator.Socket,addr,util.Encode(event))
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
-	anonCoordinator.AddClientInBuffer(publicKey)
+	anonCoordinator.AddClientInBuffer(nym, PComm)
 }
 
 // verify the msg and broadcast to clients
@@ -178,7 +191,7 @@ func handleMsg(params map[string]interface{}) {
 	// verify the identification of the client
 
 	byteText := []byte(text)
-	err = util.ElGamalVerify(anonCoordinator.Suite,byteText,nym,byteSig,anonCoordinator.G)
+	err = util.ElGamalVerify(anonCoordinator.Suite, byteText, nym, byteSig, anonCoordinator.G)
 	if err != nil {
 		fmt.Print("[note]** Fails to verify the message...")
 		return
@@ -187,24 +200,27 @@ func handleMsg(params map[string]interface{}) {
 	msgID := anonCoordinator.AddMsgLog(nym)
 
 	// generate msg to clients
+	rep := anonCoordinator.GetReputation(nym)
+	byteRep, err := rep.MarshalBinary()
+	util.CheckErr(err)
 	pm := map[string]interface{}{
 		"text" : text,
 		"nym" : params["nym"].([]byte),
-		"rep" : anonCoordinator.GetReputation(nym),
+		"rep" : byteRep,
 		"msgID" : msgID,
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:pm}
 
 	// send to all the clients
-	for _,val := range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket,val,util.Encode(event))
+	for _,addr := range anonCoordinator.Clients {
+		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 	}
 	// send confirmation to msg sender
 	pmMsg := map[string]interface{}{
 		"reply" : true,
 	}
 	event1 := &proto.Event{EventType:proto.MSG_REPLY, Params:pmMsg}
-	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event1))
+	util.Send(anonCoordinator.Socket, srcAddr, util.Encode(event1))
 }
 
 // verify the vote and reply to client
@@ -236,11 +252,11 @@ func handleVote(params map[string]interface{}) {
 		commands := strings.Split(text,";")
 		// modify the reputation
 		msgID, _ := strconv.Atoi(commands[0])
-		vote, _ := strconv.Atoi(commands[1])
+		// vote, _ := strconv.Atoi(commands[1])
 		targetNym := anonCoordinator.MsgLog[msgID-1]
 
 		anonCoordinator.DecryptedReputationMap[targetNym.String()] =
-					anonCoordinator.DecryptedReputationMap[targetNym.String()] + vote
+					anonCoordinator.DecryptedReputationMap[targetNym.String()] //+ vote
 		// generate reply msg to client
 		pm = map[string]interface{}{
 			"reply" : true,
@@ -257,19 +273,19 @@ func handleVote(params map[string]interface{}) {
 func handleRoundEnd(params map[string]interface{}) {
 	// review reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
-	valList := params["vals"].([]util.ByteArray)
-	anonCoordinator.ReputationMap = make(map[string][]byte)
+	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	anonCoordinator.ReputationMap = make(map[string]abstract.Point)
 	anonCoordinator.ReputationKeyMap = make(map[string]abstract.Point)
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.ReputationMap[keyList[i].String()] = valList[i].Arr
+		anonCoordinator.ReputationMap[keyList[i].String()] = valList[i]
 		anonCoordinator.ReputationKeyMap[keyList[i].String()] = keyList[i]
 	}
 
 	// send user round-end message
 	pm := map[string]interface{} {}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-	for _,val := range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket,val,util.Encode(event))
+	for _,addr := range anonCoordinator.Clients {
+		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 	}
 	time.Sleep(500 * time.Millisecond)
 	anonCoordinator.Status = READY_FOR_NEW_ROUND

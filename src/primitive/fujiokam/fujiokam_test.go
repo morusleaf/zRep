@@ -14,14 +14,14 @@ func TestDecomposeThreeSquare(t *testing.T) {
 }
 
 func TestCreation(t *testing.T) {
-	createBase()
+	CreateBase()
 }
 
 func TestNonneg(t *testing.T) {
-	base, p, q := createBase()
+	base := CreateBase()
 	x := new(big.Int).SetInt64(100)
-	commitx, rc := base.Commit(x, p, q)
-	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := base.ProveNonneg(x, commitx, rc, p, q)
+	commitx, rc := base.Commit(x)
+	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := base.ProveNonneg(x, commitx, rc)
 	res := base.VerifyNonneg(commitx, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
 	if !res {
 		t.Error("Verification failed")

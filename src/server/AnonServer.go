@@ -2,6 +2,7 @@ package server
 import (
 	"net"
 	"github.com/dedis/crypto/abstract"
+	"../primitive/pedersen"
 )
 
 
@@ -29,5 +30,7 @@ type AnonServer struct {
 
 	// used for modPow encryption
 	Roundkey abstract.Secret
+
+	PedersenBase *pedersen.PedersenBase
 
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/dedis/crypto/abstract"
 	"./proto"
 	"strconv"
+	"./primitive/pedersen"
 )
 
 var anonServer *server.AnonServer
@@ -57,6 +58,8 @@ func initAnonServer() {
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	RoundKey := suite.Secret().Pick(random.Stream)
+	pedersenBase := pedersen.CreateBaseFromSuite(suite)
+
 	anonServer = &server.AnonServer{
 		CoordinatorAddr: ServerAddr,
 		Socket: nil,
@@ -70,7 +73,9 @@ func initAnonServer() {
 		PreviousHop: ServerAddr,
 		KeyMap: make(map[string]abstract.Point),
 		A: nil,
-		Roundkey: RoundKey}
+		Roundkey: RoundKey,
+		PedersenBase: pedersenBase,
+	}
 }
 
 func launchServer() {

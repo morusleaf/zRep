@@ -4,11 +4,11 @@ import (
 )
 
 func TestCreation(t *testing.T) {
-	createBase()
+	CreateBase()
 }
 
 func TestCommit(t *testing.T) {
-	base := createBase()
+	base := CreateBase()
 	x := base.Suite.Secret().SetInt64(100)
 
 	commit,r := base.Commit(x)
@@ -18,7 +18,7 @@ func TestCommit(t *testing.T) {
 }
 
 func TestAdd(t *testing.T) {
-	base := createBase()
+	base := CreateBase()
 	x0 := base.Suite.Secret().SetInt64(10)
 	x1 := base.Suite.Secret().SetInt64(2)
 	x := base.Suite.Secret().Add(x0, x1)
@@ -33,7 +33,7 @@ func TestAdd(t *testing.T) {
 }
 
 func TestSub(t *testing.T) {
-	base := createBase()
+	base := CreateBase()
 	x0 := base.Suite.Secret().SetInt64(0)
 	x1 := base.Suite.Secret().SetInt64(-2)
 	x := base.Suite.Secret().Add(x0, x1)

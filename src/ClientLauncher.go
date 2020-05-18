@@ -31,7 +31,7 @@ func register() {
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONTROLLERSIDE, Params:params}
 
-	util.SendToCoodinator(dissentClient.Socket,util.Encode(event))
+	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
 }
 
 /**
@@ -45,7 +45,7 @@ func startClientListener() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		client.Handle(buf,addr,dissentClient,n) // a goroutine handles conn so that the loop can accept other connections
+		client.Handle(buf, addr, dissentClient, n) // a goroutine handles conn so that the loop can accept other connections
 	}
 }
 
@@ -53,7 +53,7 @@ func startClientListener() {
   * send message text to server
   */
 func sendMsg(text string) {
-	sendSigRequest(text,proto.MESSAGE)
+	sendSigRequest(text, proto.MESSAGE)
 }
 
 /**
@@ -63,7 +63,7 @@ func sendMsg(text string) {
 func sendSigRequest(text string, eventType int) {
 	// generate signature
 	rand := dissentClient.Suite.Cipher([]byte("example"))
-	sig := util.ElGamalSign(dissentClient.Suite,rand,[]byte(text),dissentClient.PrivateKey,dissentClient.G)
+	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
 	// serialize Point data structure
 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
 	// wrap params
@@ -74,7 +74,7 @@ func sendSigRequest(text string, eventType int) {
 	}
 	event := &proto.Event{EventType:eventType, Params:params}
 	// send to coordinator
-	util.SendToCoodinator(dissentClient.Socket,util.Encode(event))
+	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
 }
 
 /**
@@ -90,7 +90,7 @@ func sendVote(msgID, vote int) {
 	v := strconv.Itoa(vote)
 	m := strconv.Itoa(msgID)
 	text :=  m + ";" + v
-	sendSigRequest(text,proto.VOTE)
+	sendSigRequest(text, proto.VOTE)
 }
 
 
@@ -100,7 +100,7 @@ func sendVote(msgID, vote int) {
 func initServer() {
 	// load controller ip and port
 	config := util.ReadConfig()
-	ServerAddr,err := net.ResolveUDPAddr("udp",config["coordinator_ip"]+":"+ config["coordinator_port"])
+	ServerAddr,err := net.ResolveUDPAddr("udp", config["coordinator_ip"]+":"+ config["coordinator_port"])
 	util.CheckErr(err)
 	// initialize suite
 	suite := nist.NewAES128SHA256QR512()
@@ -114,7 +114,8 @@ func initServer() {
 		PrivateKey: a,
 		PublicKey: A,
 		OnetimePseudoNym: suite.Point(),
-		G: nil}
+		G: nil,
+	}
 }
 
 
@@ -145,7 +146,7 @@ func launchClient() {
 	for {
 		data, _, _ := reader.ReadLine()
 		command := string(data)
-		commands := strings.Split(command," ")
+		commands := strings.Split(command, " ")
 		switch commands[0] {
 		case "msg":
 			sendMsg(commands[1]);
@@ -153,7 +154,7 @@ func launchClient() {
 		case "vote":
 			msgID,_ := strconv.Atoi(commands[1])
 			vote, _ := strconv.Atoi(commands[2])
-			sendVote(msgID,vote)
+			sendVote(msgID, vote)
 			break;
 		case "exit":
 			break Loop

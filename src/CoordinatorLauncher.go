@@ -14,6 +14,8 @@ import (
 	"log"
 	"github.com/dedis/crypto/abstract"
 	"./proto"
+	"./primitive/pedersen"
+	"./primitive/fujiokam"
 )
 
 // pointer to coordinator itself
@@ -43,6 +45,8 @@ func initCoordinator() {
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
+	pedersenBase := pedersen.CreateBaseFromSuite(suite)
+	fujiokamBase := fujiokam.CreateBase()
 
 	anonCoordinator = &coordinator.Coordinator{
 		LocalAddr: ServerAddr,
@@ -55,13 +59,35 @@ func initCoordinator() {
 		G: nil,
 		Clients: make(map[string]*net.UDPAddr),
 		ReputationKeyMap: make(map[string]abstract.Point),
-		ReputationMap: make(map[string][]byte),
+		ReputationMap: make(map[string]abstract.Point),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
-		DecryptedReputationMap: make(map[string]int),
-		DecryptedKeysMap: make(map[string]abstract.Point)}
+		DecryptedReputationMap: make(map[string]abstract.Point),
+		DecryptedKeysMap: make(map[string]abstract.Point),
+		PedersenBase: pedersenBase,
+		FujiOkamBase: fujiokamBase,
+	}
 }
 
+// config parameters for commitments
+func configCommParams() {
+	// Config Pedersen Commitment
+	base := anonCoordinator.PedersenBase
+	h := base.H // TODO: generate this from all servers
+	byteH, err := h.MarshalBinary()
+	util.CheckErr(err)
+	// broadcast hm
+	params := map[string]interface{}{
+		"h": byteH,
+	}
+	event := &proto.Event{EventType: proto.BCAST_PEDERSEN_H, Params: params}
+	for _, server := range anonCoordinator.ServerList {
+		util.Send(anonCoordinator.Socket, server, util.Encode(event))
+	}
+
+	// Config Fujisaki-Okamoto Commitment
+	// TODO: publish parameters and non-neg proof
+}
 
 /**
  * clear all buffer data
@@ -86,7 +112,7 @@ func announce() {
 	// construct reputation list (public & encrypted reputation)
 	size := len(anonCoordinator.ReputationMap)
 	keys := make([]abstract.Point,size)
-	vals := make([][]byte,size)
+	vals := make([]abstract.Point,size)
 	i := 0
 	for k, v := range anonCoordinator.ReputationMap {
 		keys[i] = anonCoordinator.ReputationKeyMap[k]
@@ -94,7 +120,7 @@ func announce() {
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
-	byteVals := util.SerializeTwoDimensionArray(vals)
+	byteVals := util.ProtobufEncodePointList(vals)
 	params := map[string]interface{}{
 		"keys" : byteKeys,
 		"vals" : byteVals,
@@ -114,14 +140,14 @@ func roundEnd() {
 		return
 	}
 	// add new clients into reputation map
-	for _,nym := range anonCoordinator.NewClientsBuffer {
-		anonCoordinator.AddIntoDecryptedMap(nym,0)
+	for _,cdata := range anonCoordinator.NewClientsBuffer {
+		anonCoordinator.AddIntoDecryptedMap(cdata.Nym, cdata.PComm)
 	}
 	// add previous clients into reputation map
 	// construct the parameters
 	size := len(anonCoordinator.DecryptedReputationMap)
 	keys := make([]abstract.Point,size)
-	vals := make([]int,size)
+	vals := make([]abstract.Point,size)
 	i := 0
 	for k, v := range anonCoordinator.DecryptedReputationMap {
 		keys[i] = anonCoordinator.DecryptedKeysMap[k]
@@ -129,10 +155,11 @@ func roundEnd() {
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
+	byteVals := util.ProtobufEncodePointList(vals)
 	// send signal to server
 	pm := map[string]interface{} {
 		"keys" : byteKeys,
-		"vals" : vals,
+		"vals" : byteVals,
 		"is_start" : true,
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
@@ -148,11 +175,16 @@ func roundEnd() {
 func vote() {
 	pm := map[string]interface{} {}
 	event := &proto.Event{EventType:proto.VOTE, Params:pm}
-	for _, val :=  range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket, val, util.Encode(event))
+	for _, addr :=  range anonCoordinator.Clients {
+		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 	}
 }
 
+func waitKeypress(prompt string) {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	reader.ReadLine()
+}
 
 func launchCoordinator() {
 	// init coordinator
@@ -165,16 +197,11 @@ func launchCoordinator() {
 	go startServerListener()
 	fmt.Println("** Note: Type ok to finish the server configuration. **")
 	// read ok to start life cycle
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		data, _, _ := reader.ReadLine()
-		command := string(data)
-		if command == "ok" {
-			break
-		}
-	}
+	waitKeypress("Press enter to start:\n")
 	fmt.Println("[debug] Servers in the current network:")
 	fmt.Println(anonCoordinator.ServerList)
+	fmt.Println("Configuring parameters of commitments.")
+	configCommParams()
 	anonCoordinator.Status = coordinator.READY_FOR_NEW_ROUND
 	for {
 		// wait for the status changed to READY_FOR_NEW_ROUND
@@ -191,6 +218,7 @@ func launchCoordinator() {
 			log.Fatal("Fails to be ready for the new round")
 			os.Exit(1)
 		}
+		// waitKeypress("Press enter to start new round: ")
 		anonCoordinator.Status = coordinator.ANNOUNCE
 		fmt.Println("[coordinator] Announcement phase started...")
 		// start announce phase
@@ -209,10 +237,12 @@ func launchCoordinator() {
 		fmt.Println("[coordinator] Messaging phase started...")
 		// 10 secs for msg
 		time.Sleep(10000 * time.Millisecond)
+		// waitKeypress("Press enter to start voting: ")
 		vote()
 		fmt.Println("[coordinator] Voting phase started...")
 		// 10 secs for vote
 		time.Sleep(10000 * time.Millisecond)
+		// waitKeypress("Press enter to finish voting: ")
 		roundEnd()
 	}
 }

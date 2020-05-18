@@ -2,7 +2,14 @@ package coordinator
 import (
 	"github.com/dedis/crypto/abstract"
 	"net"
+	"../primitive/pedersen"
+	"../primitive/fujiokam"
 )
+
+type ClientTuple struct {
+	Nym abstract.Point
+	PComm abstract.Point
+}
 
 type Coordinator struct {
 	// local address
@@ -28,17 +35,18 @@ type Coordinator struct {
 	Clients map[string]*net.UDPAddr
 	// store reputation map
 	ReputationKeyMap map[string]abstract.Point
-	ReputationMap map[string][]byte
+	ReputationMap map[string]abstract.Point
 	// we only add new clients at the beginning of each round
 	// store the new clients's one-time pseudo nym
-	NewClientsBuffer []abstract.Point
+	NewClientsBuffer []ClientTuple
 	// msg sender's record nym
 	MsgLog []abstract.Point
 
-	DecryptedReputationMap map[string]int
+	DecryptedReputationMap map[string]abstract.Point
 	DecryptedKeysMap map[string]abstract.Point
 
-
+	PedersenBase *pedersen.PedersenBase
+	FujiOkamBase *fujiokam.FujiOkamBase
 
 }
 
@@ -81,21 +89,21 @@ func (c *Coordinator) AddMsgLog(log abstract.Point) int{
 }
 
 // get reputation
-func (c *Coordinator) GetReputation(key abstract.Point) int{
+func (c *Coordinator) GetReputation(key abstract.Point) abstract.Point{
 	return c.DecryptedReputationMap[key.String()]
 }
 
-func (c *Coordinator) AddClientInBuffer(nym abstract.Point) {
-	c.NewClientsBuffer = append(c.NewClientsBuffer, nym)
+func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point) {
+	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm})
 }
 
-func (c *Coordinator) AddIntoDecryptedMap(key abstract.Point, val int) {
+func (c *Coordinator) AddIntoDecryptedMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
 	c.DecryptedKeysMap[keyStr] = key
 	c.DecryptedReputationMap[keyStr] = val
 }
 
-func (c *Coordinator) AddIntoRepMap(key abstract.Point, val []byte) {
+func (c *Coordinator) AddIntoRepMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
 	c.ReputationKeyMap[keyStr] = key
 	c.ReputationMap[keyStr] = val
