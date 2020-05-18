@@ -202,7 +202,7 @@ func launchCoordinator() {
 	go startServerListener()
 	fmt.Println("** Note: Type ok to finish the server configuration. **")
 	// read ok to start life cycle
-	waitKeypress("Press enter to start:\n")
+	waitKeypress("Press [enter] to start:\n")
 	fmt.Println("[debug] Servers in the current network:")
 	fmt.Println(anonCoordinator.ServerList)
 	fmt.Println("Configuring parameters of commitments.")
@@ -241,13 +241,13 @@ func launchCoordinator() {
 		// start message and vote phase
 		fmt.Println("[coordinator] Messaging phase started...")
 		// 10 secs for msg
-		time.Sleep(10000 * time.Millisecond)
-		// waitKeypress("Press enter to start voting: ")
+		// time.Sleep(10000 * time.Millisecond)
+		waitKeypress("Press [enter] to end posting:\n")
 		vote()
 		fmt.Println("[coordinator] Voting phase started...")
 		// 10 secs for vote
-		time.Sleep(10000 * time.Millisecond)
-		// waitKeypress("Press enter to finish voting: ")
+		// time.Sleep(10000 * time.Millisecond)
+		waitKeypress("Press [enter] to finish voting:\n")
 		roundEnd()
 	}
 }
