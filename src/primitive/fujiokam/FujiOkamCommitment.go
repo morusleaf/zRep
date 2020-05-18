@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math"
 	"crypto/sha256"
+	"fmt"
 )
 
 type FujiOkamBase struct {
@@ -27,30 +28,33 @@ type FujiOkamBase struct {
 // genRandomSecret returns a random int from -RandomRadius ~ RandomRadius,
 // and it has be in Z*_{p*q}
 func (base *FujiOkamBase) genRandomSecret() *big.Int {
-	p := base.P
-	q := base.Q
-	pq := new(big.Int).Mul(p, q)
-	var s *big.Int = nil
-	modp := new(big.Int)
-	modq := new(big.Int)
-	for {
-		s = random.Int(base.RandomDiameter, random.Stream)
-		s.Sub(s, base.RandomRadius)
-		alpha := new(big.Int).Mod(s, pq)
-		// (alpha, p) = 1 and (alpha, q) = 1 and alpha != 1
-		if alpha.Cmp(bigOne) == 0 {
-			continue
-		}
-		modp.Mod(alpha, p)
-		if modp.Cmp(bigZero) == 0 {
-			continue
-		}
-		modq.Mod(alpha, q)
-		if modq.Cmp(bigZero) == 0 {
-			continue
-		}
-		break
-	}
+	// p := base.P
+	// q := base.Q
+	// pq := new(big.Int).Mul(p, q)
+	// var s *big.Int = nil
+	// modp := new(big.Int)
+	// modq := new(big.Int)
+	// for {
+	// 	s = random.Int(base.RandomDiameter, random.Stream)
+	// 	s.Sub(s, base.RandomRadius)
+	// 	alpha := new(big.Int).Mod(s, pq)
+	// 	// (alpha, p) = 1 and (alpha, q) = 1 and alpha != 1
+	// 	if alpha.Cmp(bigOne) == 0 {
+	// 		continue
+	// 	}
+	// 	modp.Mod(alpha, p)
+	// 	if modp.Cmp(bigZero) == 0 {
+	// 		continue
+	// 	}
+	// 	modq.Mod(alpha, q)
+	// 	if modq.Cmp(bigZero) == 0 {
+	// 		continue
+	// 	}
+	// 	break
+	// }
+	// return s
+	s := random.Int(base.RandomDiameter, random.Stream)
+	// s.Sub(s, base.RandomRadius)
 	return s
 }
 
@@ -91,24 +95,32 @@ func (base *FujiOkamBase) genH() *Point {
 	return H1
 }
 
-func CreateBase() (*FujiOkamBase) {
-	suite := nist.NewAES128SHA256QR512()
-	p := new(big.Int).SetInt64(3)
-	q := new(big.Int).SetInt64(5)
-	// n := (2p + 1) * (2q + 1)
-	n := new(big.Int).SetInt64(77)
+func CreateMinimumBase(suite abstract.Suite, n *big.Int) (*FujiOkamBase) {
 	base := &FujiOkamBase {
 		Suite : suite,
 		N : n,
-		P : p,
-		Q : q,
 	}
-
 	randomRadius, _ := new(big.Int).SetString("10000", 16)
 	randomRadius.Mul(randomRadius, base.N)
 	randomDiameter := new(big.Int).Mul(randomRadius, bigTwo)
 	base.RandomRadius = randomRadius
 	base.RandomDiameter = randomDiameter
+	return base
+}
+
+func CreateBase() (*FujiOkamBase) {
+	suite := nist.NewAES128SHA256QR512()
+	return CreateBaseFromSuite(suite)
+}
+
+func CreateBaseFromSuite(suite abstract.Suite) (*FujiOkamBase) {
+	p := new(big.Int).SetInt64(3)
+	q := new(big.Int).SetInt64(5)
+	// n := (2p + 1) * (2q + 1)
+	n := new(big.Int).SetInt64(77)
+	base := CreateMinimumBase(suite, n)
+	base.P = p
+	base.Q = q
 	
 	base.H1 = base.genH()
 	base.G1 = base.genGn()
@@ -166,6 +178,15 @@ type Point struct {
 
 func (p *Point) String() string {
 	return p.V.String()
+}
+
+func (p *Point) ToBinary() []byte {
+	return p.V.Bytes()
+}
+
+func (p *Point) FromBinary(data []byte) *Point {
+	p.V.SetBytes(data)
+	return p
 }
 
 func (base *FujiOkamBase) Point() *Point {
@@ -227,7 +248,37 @@ func (base *FujiOkamBase) Commit(x *big.Int) (*Point, *big.Int) {
 	return commitx, r
 }
 
-func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (*Point, *Point, *Point, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int) {
+type ARGnonneg struct {
+	Commitrx *big.Int
+	C *big.Int
+	Cr *big.Int
+	R *big.Int
+	X_ *big.Int
+	A_ *big.Int
+	B_ *big.Int
+	D_ *big.Int
+	R_ *big.Int
+}
+
+func (base*FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) *ARGnonneg {
+	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := base.ProveNonnegHelper(x, commitx, rc)
+	return &ARGnonneg{
+		Commitrx: &commitrx.V,
+		C: &C.V,
+		Cr: &Cr.V,
+		R: R,
+		X_: x_,
+		A_: a_,
+		B_: b_,
+		D_: d_,
+		R_: r_,
+	}
+}
+
+func (base *FujiOkamBase) ProveNonnegHelper(x *big.Int, commitx *Point, rc *big.Int) (*Point, *Point, *Point, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int, *big.Int) {
+	if x.Cmp(bigZero) < 0 {
+		panic("x must be non-negative");
+	}
 	a, b, d := decomposeThreeSquare(x)
 	ti := new(big.Int)
 	tp := base.Point()
@@ -316,7 +367,7 @@ func (base *FujiOkamBase) ProveNonneg(x *big.Int, commitx *Point, rc *big.Int) (
 	return commitrx, C, Cr, R, x_, a_, b_, d_, r_
 }
 
-func (base *FujiOkamBase) VerifyNonneg(commitx, commitrx, C, Cr *Point, R, x_, a_, b_, d_, r_ *big.Int) bool {
+func (base *FujiOkamBase) VerifyNonnegHelper(commitx, commitrx, C, Cr *Point, R, x_, a_, b_, d_, r_ *big.Int) bool {
 	// e := hash(commitx, C, Cr)
 	h := sha256.New()
 	h.Write(commitx.V.Bytes())
@@ -336,6 +387,7 @@ func (base *FujiOkamBase) VerifyNonneg(commitx, commitrx, C, Cr *Point, R, x_, a
 	delta_.Sub(delta_, ti)
 	ti.Mul(d_, d_)
 	delta_.Sub(delta_, ti)
+	fmt.Println("delta_", delta_)
 
 	// Lside := C^e * Cr (mod n)
 	Lside := base.Point()
@@ -354,6 +406,8 @@ func (base *FujiOkamBase) VerifyNonneg(commitx, commitrx, C, Cr *Point, R, x_, a
 	Rside.Mul(Rside, tp)
 	tp.Exp(base.H1, r_)
 	Rside.Mul(Rside, tp)
+	fmt.Println("Lside", Lside)
+	fmt.Println("Rside", Rside)
 	// check Lside == Rside
 	if !Lside.Equal(Rside) {
 		return false
@@ -366,6 +420,8 @@ func (base *FujiOkamBase) VerifyNonneg(commitx, commitrx, C, Cr *Point, R, x_, a
 	Rside.Exp(base.G1, x_)
 	tp.Exp(base.H1, R)
 	Rside.Mul(Rside, tp)
+	fmt.Println("Lside", Lside)
+	fmt.Println("Rside", Rside)
 	// check Lside == Rside
 	if !Lside.Equal(Rside) {
 		return false

@@ -7,6 +7,8 @@ import (
 	"../util"
 	"bytes"
 	"strconv"
+	"math/big"
+	"../primitive/fujiokam"
 )
 
 func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
@@ -16,10 +18,10 @@ func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 	util.CheckErr(err)
 	switch event.EventType {
 	case proto.CLIENT_REGISTER_CONFIRMATION:
-		handleRegisterConfirmation(dissentClient);
+		handleRegisterConfirmation(event.Params, dissentClient);
 		break
 	case proto.ANNOUNCEMENT:
-		handleAnnouncement(event.Params,dissentClient);
+		handleAnnouncement(event.Params, dissentClient);
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, dissentClient)
@@ -45,8 +47,18 @@ func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 
 
 // print out register success info
-func handleRegisterConfirmation(dissentClient *DissentClient) {
+func handleRegisterConfirmation(params map[string]interface{}, dissentClient *DissentClient) {
 	dissentClient.Status = CONNECTED
+	N := new(big.Int).SetBytes(params["n"].([]byte))
+	base := fujiokam.CreateMinimumBase(dissentClient.Suite, N)
+	base.G1 = base.Point().FromBinary(params["g1"].([]byte))
+	base.G2 = base.Point().FromBinary(params["g2"].([]byte))
+	base.G3 = base.Point().FromBinary(params["g3"].([]byte))
+	base.G4 = base.Point().FromBinary(params["g4"].([]byte))
+	base.G5 = base.Point().FromBinary(params["g5"].([]byte))
+	base.G6 = base.Point().FromBinary(params["g6"].([]byte))
+	base.H1 = base.Point().FromBinary(params["h1"].([]byte))
+	dissentClient.FujiOkamBase = base
 	// simply print out register success info here
 	fmt.Println("[client] Register success. Waiting for new round begin...");
 }

@@ -12,13 +12,7 @@ type PedersenBase struct {
 
 func CreateBase() *PedersenBase {
 	suite := nist.NewAES128SHA256QR512()
-	s := suite.Secret().Pick(random.Stream)
-	h := suite.Point().Mul(nil, s)
-	base := &PedersenBase {
-		Suite: suite,
-		H: h,
-	}
-	return base
+	return CreateBaseFromSuite(suite)
 }
 
 func CreateBaseFromSuite(suite abstract.Suite) *PedersenBase {

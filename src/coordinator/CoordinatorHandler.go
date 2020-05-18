@@ -14,6 +14,7 @@ import (
 	"time"
 	"github.com/dedis/crypto/abstract"
 	// "../primitive/fujiokam"
+	"math/big"
 )
 
 var anonCoordinator *Coordinator
@@ -151,7 +152,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 		"pcomm": bytePComm,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
-	util.Send(anonCoordinator.Socket,firstServer,util.Encode(event))
+	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
 }
 
 // handle client register successful event
@@ -168,11 +169,21 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	util.CheckErr(err)
 
 	var addrStr = params["addr"].(string)
-	addr,err := net.ResolveUDPAddr("udp",addrStr)
+	addr,err := net.ResolveUDPAddr("udp", addrStr)
 	util.CheckErr(err)
-	pm := map[string]interface{}{}
+	fujiokamBase := anonCoordinator.FujiOkamBase
+	pm := map[string]interface{}{
+		"n": fujiokamBase.N.Bytes(),
+		"g1": fujiokamBase.G1.ToBinary(),
+		"g2": fujiokamBase.G2.ToBinary(),
+		"g3": fujiokamBase.G3.ToBinary(),
+		"g4": fujiokamBase.G4.ToBinary(),
+		"g5": fujiokamBase.G5.ToBinary(),
+		"g6": fujiokamBase.G6.ToBinary(),
+		"h1": fujiokamBase.H1.ToBinary(),
+	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
-	util.Send(anonCoordinator.Socket,addr,util.Encode(event))
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
 	anonCoordinator.AddClientInBuffer(nym, PComm)
@@ -197,6 +208,26 @@ func handleMsg(params map[string]interface{}) {
 		fmt.Print("[note]** Fails to verify the message...")
 		return
 	}
+
+	fujiokamBase := anonCoordinator.FujiOkamBase
+	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
+	commitrxV := new(big.Int).SetBytes(params["commitrx"].([]byte))
+	CV := new(big.Int).SetBytes(params["C"].([]byte))
+	CrV := new(big.Int).SetBytes(params["Cr"].([]byte))
+	R := new(big.Int).SetBytes(params["R"].([]byte))
+	x_ := new(big.Int).SetBytes(params["x_"].([]byte))
+	a_ := new(big.Int).SetBytes(params["a_"].([]byte))
+	b_ := new(big.Int).SetBytes(params["b_"].([]byte))
+	d_ := new(big.Int).SetBytes(params["d_"].([]byte))
+	r_ := new(big.Int).SetBytes(params["r_"].([]byte))
+	fmt.Println(commitrxV, CV, CrV, R, x_, a_, b_, d_, r_)
+	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
+	commitrx := fujiokamBase.Point().BigInt(commitrxV)
+	C := fujiokamBase.Point().BigInt(CV)
+	Cr := fujiokamBase.Point().BigInt(CrV)
+	res := fujiokamBase.VerifyNonnegHelper(FOCommd, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
+	fmt.Println("verify result:", res)
+
 	// add msg log
 	msgID := anonCoordinator.AddMsgLog(nym)
 

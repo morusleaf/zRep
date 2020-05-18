@@ -2,6 +2,7 @@ package client
 import (
 	"github.com/dedis/crypto/abstract"
 	"net"
+	"../primitive/fujiokam"
 )
 
 
@@ -18,4 +19,6 @@ type DissentClient struct {
 	PublicKey abstract.Point
 	OnetimePseudoNym abstract.Point
 	G abstract.Point
+
+	FujiOkamBase *fujiokam.FujiOkamBase
 }

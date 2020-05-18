@@ -14,7 +14,7 @@ import (
 	"github.com/dedis/crypto/nist"
 
 	"github.com/dedis/crypto/random"
-	// "../primitive/fujiokam"
+	"../primitive/fujiokam"
 )
 
 func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
@@ -54,6 +54,22 @@ func CheckErr(err error) {
 	}
 }
 
+func ProtobufEncodeARGnonneg(arg *fujiokam.ARGnonneg) []byte {
+	data, err := protobuf.Encode(arg)
+	if err != nil {
+		panic(err.Error())
+	}
+	return data
+}
+
+func ProtobufDecodeARGnonneg(bytes []byte) *fujiokam.ARGnonneg {
+	arg := new(fujiokam.ARGnonneg)
+	if err := protobuf.Decode(bytes, arg); err != nil {
+		log.Fatal(err)
+	}
+	return arg
+}
+
 func ProtobufEncodePointList(plist []abstract.Point) []byte {
 	byteNym, err := protobuf.Encode(&PointList{plist})
 	if err != nil {
@@ -76,28 +92,6 @@ func ProtobufDecodePointList(bytes []byte) []abstract.Point {
 	}
 	return msg.Points
 }
-
-// func ProtobufEncodeFujiOkamPointList(plist []fujiokam.Point) []byte {
-// 	byteNym, err := protobuf.Encode(&FujiOkamPointList{plist})
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	return byteNym
-// }
-
-// func ProtobufDecodeFujiOkamPointList(base *fujiokam.FujiOkamBase, bytes []byte) []fujiokam.Point {
-// 	var aPoint fujiokam.Point
-// 	var tPoint = reflect.TypeOf(&aPoint).Elem()
-// 	cons := protobuf.Constructors {
-// 		tPoint: func()interface{} { return base.Point() },
-// 	}
-
-// 	var msg FujiOkamPointList
-// 	if err := protobuf.DecodeWithConstructors(bytes, &msg, cons); err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	return msg.Points
-// }
 
 func ByteToInt(b []byte) int {
 	myInt:= binary.BigEndian.Uint32(b)

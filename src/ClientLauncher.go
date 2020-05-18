@@ -14,7 +14,7 @@ import (
 	"strings"
 	"log"
 	"time"
-
+	"math/big"
 )
 
 // pointer to client itself
@@ -52,30 +52,67 @@ func startClientListener() {
 /**
   * send message text to server
   */
-func sendMsg(text string) {
-	sendSigRequest(text, proto.MESSAGE)
+func sendMsg(ind int, text string) {
+	if ind < 0 { // XXX: should use (ind-rep) instead
+		fmt.Println("indicator should be non-neg")
+		return
+	}
+
+	// generate ARGnonneg
+	bigInd := new(big.Int).SetInt64(int64(ind))
+	FOCommd, rc := dissentClient.FujiOkamBase.Commit(bigInd)
+	commitrx, C, Cr, R, x_, a_, b_, d_, r_ := dissentClient.FujiOkamBase.ProveNonnegHelper(bigInd, FOCommd, rc)
+	fmt.Println(commitrx, C, Cr, R, x_, a_, b_, d_, r_)
+	res := dissentClient.FujiOkamBase.VerifyNonnegHelper(FOCommd, commitrx, C, Cr, R, x_, a_, b_, d_, r_)
+	fmt.Println("self verify:", res)
+
+	// generate signature
+	rand := dissentClient.Suite.Cipher([]byte("example"))
+	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
+	// serialize Point data structure
+	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
+
+	// wrap params
+	params := map[string]interface{}{
+		"text": text,
+		"nym": byteNym,
+		"signature": sig,
+		"FOCommd": FOCommd.ToBinary(),
+		"commitrx": commitrx.ToBinary(),
+		"C": C.ToBinary(),
+		"Cr": Cr.ToBinary(),
+		"R": R.Bytes(),
+		"x_": x_.Bytes(),
+		"a_": a_.Bytes(),
+		"b_": b_.Bytes(),
+		"d_": d_.Bytes(),
+		"r_": r_.Bytes(),
+	}
+	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
+	// send to coordinator
+	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
 }
 
 /**
   * send general request to server
   * the request is encrypted by signature
   */
-func sendSigRequest(text string, eventType int) {
-	// generate signature
-	rand := dissentClient.Suite.Cipher([]byte("example"))
-	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
-	// serialize Point data structure
-	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
-	// wrap params
-	params := map[string]interface{}{
-		"text": text,
-		"nym":byteNym,
-		"signature":sig,
-	}
-	event := &proto.Event{EventType:eventType, Params:params}
-	// send to coordinator
-	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
-}
+// func sendSigRequest(text string, eventType int) {
+// 	// generate signature
+// 	rand := dissentClient.Suite.Cipher([]byte("example"))
+// 	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
+// 	// serialize Point data structure
+// 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
+// 	// wrap params
+// 	params := map[string]interface{}{
+// 		"text": text,
+// 		"nym":byteNym,
+// 		"signature":sig,
+// 	}
+// 	event := &proto.Event{EventType:eventType, Params:params}
+// 	// send to coordinator
+// 	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+// }
 
 /**
   * send vote to server
@@ -90,7 +127,21 @@ func sendVote(msgID, vote int) {
 	v := strconv.Itoa(vote)
 	m := strconv.Itoa(msgID)
 	text :=  m + ";" + v
-	sendSigRequest(text, proto.VOTE)
+
+	// generate signature
+	rand := dissentClient.Suite.Cipher([]byte("example"))
+	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
+	// serialize Point data structure
+	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
+	// wrap params
+	params := map[string]interface{}{
+		"text": text,
+		"nym":byteNym,
+		"signature":sig,
+	}
+	event := &proto.Event{EventType:proto.VOTE, Params:params}
+	// send to coordinator
+	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
 }
 
 
@@ -115,6 +166,7 @@ func initServer() {
 		PublicKey: A,
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
+		FujiOkamBase: nil,
 	}
 }
 
@@ -149,7 +201,8 @@ func launchClient() {
 		commands := strings.Split(command, " ")
 		switch commands[0] {
 		case "msg":
-			sendMsg(commands[1]);
+			ind,_ := strconv.Atoi(commands[1])
+			sendMsg(ind, commands[2])
 			break;
 		case "vote":
 			msgID,_ := strconv.Atoi(commands[1])

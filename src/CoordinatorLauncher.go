@@ -46,7 +46,7 @@ func initCoordinator() {
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	pedersenBase := pedersen.CreateBaseFromSuite(suite)
-	fujiokamBase := fujiokam.CreateBase()
+	fujiokamBase := fujiokam.CreateBaseFromSuite(suite)
 
 	anonCoordinator = &coordinator.Coordinator{
 		LocalAddr: ServerAddr,
