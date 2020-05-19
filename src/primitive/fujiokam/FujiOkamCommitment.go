@@ -241,10 +241,15 @@ func (p *Point) Exp(a *Point, s *big.Int) *Point {
 
 func (base *FujiOkamBase) Commit(x *big.Int) (*Point, *big.Int) {
 	r := base.genRandomSecret()
+	commitx := base.CommitWithR(x, r)
+	return commitx, r
+}
+
+func (base *FujiOkamBase) CommitWithR(x, r *big.Int) *Point {
 	commitx := base.Point().Exp(base.G1, x)
 	tp := base.Point().Exp(base.H1, r)
 	commitx.Mul(commitx, tp)
-	return commitx, r
+	return commitx
 }
 
 type ARGnonneg struct {

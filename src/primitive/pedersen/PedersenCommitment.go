@@ -34,10 +34,16 @@ func (base *PedersenBase) Commit(x abstract.Secret) (Commitment, abstract.Secret
 	// Order of r is either (p-1) when r is odd, or (p-1)/2 when r is even.
 	// Both are large enough.
 	r := base.Suite.Secret().Pick(random.Stream)
+	pcomm := base.CommitWithR(x, r)
+	return pcomm, r
+}
+
+// compute g^x * h^r (mod p)
+func (base *PedersenBase) CommitWithR(x, r abstract.Secret) Commitment {
 	t1 := base.Suite.Point().Mul(nil, x)
 	t2 := base.Suite.Point().Mul(base.H, r)
 	pcomm := base.Suite.Point().Add(t1, t2)
-	return pcomm, r
+	return pcomm
 }
 
 // return c * H^E
