@@ -9,6 +9,7 @@ import (
 type ClientTuple struct {
 	Nym abstract.Point
 	PComm abstract.Point
+	E abstract.Secret
 }
 
 type Coordinator struct {
@@ -94,8 +95,8 @@ func (c *Coordinator) GetReputationDiff(key abstract.Point) int{
 	return c.ReputationDiffMap[key.String()]
 }
 
-func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point) {
-	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm})
+func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point, E abstract.Secret) {
+	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm, E: E})
 }
 
 func (c *Coordinator) AddIntoDecryptedMap(key abstract.Point, val abstract.Point) {

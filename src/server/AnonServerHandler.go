@@ -93,7 +93,7 @@ func handleRoundEnd(params map[string]interface{}) {
 		// decrypt the public key
 		newKeys[i] = anonServer.KeyMap[keyList[i].String()]
 		// randomize PComm
-		newVals[i] = anonServer.PedersenBase.Randomize(valList[i])
+		newVals[i], _ = anonServer.PedersenBase.Randomize(valList[i])
 	}
 	byteNewKeys := util.ProtobufEncodePointList(newKeys)
 	byteNewVals := util.ProtobufEncodePointList(newVals)
@@ -203,9 +203,16 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	PComm := anonServer.Suite.Point()
 	err = PComm.UnmarshalBinary(params["pcomm"].([]byte))
 	util.CheckErr(err)
+	E := anonServer.Suite.Secret()
+	err = E.UnmarshalBinary(params["E"].([]byte))
+	util.CheckErr(err)
 	// randomize PComm
-	nextPComm := anonServer.PedersenBase.Randomize(PComm)
+	nextPComm, rPComm := anonServer.PedersenBase.Randomize(PComm)
 	byteNextPComm, err := nextPComm.MarshalBinary()
+	util.CheckErr(err)
+	// accumulate E
+	E.Add(E, rPComm)
+	byteE, err := E.MarshalBinary()
 	util.CheckErr(err)
 
 	newKey := anonServer.Suite.Point().Mul(publicKey,anonServer.Roundkey)
@@ -215,6 +222,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"public_key" : byteNewKey,
 		"addr" : params["addr"].(string),
 		"pcomm": byteNextPComm,
+		"E": byteE,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonServer.Socket,anonServer.NextHop,util.Encode(event))
@@ -253,7 +261,7 @@ func handleAnnouncement(params map[string]interface{}) {
 		// encrypt the public key using modPow
 		newKeys[i] = anonServer.Suite.Point().Mul(keyList[i], anonServer.Roundkey)
 		// randomize PComm
-		newVals[i] = anonServer.PedersenBase.Randomize(valList[i])
+		newVals[i], _ = anonServer.PedersenBase.Randomize(valList[i])
 		// update key map
 		anonServer.KeyMap[newKeys[i].String()] = keyList[i]
 	}

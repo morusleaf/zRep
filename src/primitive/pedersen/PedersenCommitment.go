@@ -46,11 +46,11 @@ func (base *PedersenBase) CommitWithR(x, r abstract.Secret) Commitment {
 	return pcomm
 }
 
-// return c * H^E
-func (base *PedersenBase) Randomize(c abstract.Point) abstract.Point {
+// randomize a commitment by multipling h^E
+func (base *PedersenBase) Randomize(c abstract.Point) (abstract.Point, abstract.Secret) {
 	E := base.Suite.Secret().Pick(random.Stream)
 	HE := base.Suite.Point().Mul(base.H, E)
-	return base.Suite.Point().Add(c, HE)
+	return base.Suite.Point().Add(c, HE), E
 }
 
 func (base *PedersenBase) Add(x, y Commitment) Commitment {

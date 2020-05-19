@@ -142,8 +142,10 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 
 	// compute Pedersen commitment
 	xInit := anonCoordinator.Suite.Secret().SetInt64(0)
-	PComm, _ := anonCoordinator.PedersenBase.Commit(xInit)
+	PComm, E := anonCoordinator.PedersenBase.Commit(xInit)
 	bytePComm, err := PComm.MarshalBinary()
+	util.CheckErr(err)
+	byteE, err := E.MarshalBinary()
 	util.CheckErr(err)
 
 	// send register info to the first server
@@ -152,6 +154,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 		"public_key": params["public_key"],
 		"addr": srcAddr.String(),
 		"pcomm": bytePComm,
+		"E": byteE,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
@@ -164,10 +167,12 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	byteNym := params["public_key"].([]byte)
 	nym.UnmarshalBinary(byteNym)
 
-	// get PComm from params (encrypted by all servers)
+	// get PComm and accumulated E from params (encrypted by all servers)
 	var PComm = anonCoordinator.Suite.Point()
-	bytePComm := params["pcomm"].([]byte)
-	err := PComm.UnmarshalBinary(bytePComm)
+	err := PComm.UnmarshalBinary(params["pcomm"].([]byte))
+	util.CheckErr(err)
+	var E = anonCoordinator.Suite.Secret()
+	err = E.UnmarshalBinary(params["E"].([]byte))
 	util.CheckErr(err)
 
 	// encode h from Pedersen Commitment base
@@ -193,7 +198,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
-	anonCoordinator.AddClientInBuffer(nym, PComm)
+	anonCoordinator.AddClientInBuffer(nym, PComm, E)
 }
 
 // verify the msg and broadcast to clients
