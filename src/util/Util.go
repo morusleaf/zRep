@@ -119,6 +119,29 @@ func ProtobufDecodePointList(bytes []byte) []abstract.Point {
 	return msg.Points
 }
 
+func ProtobufEncodeSecretList(plist []abstract.Secret) []byte {
+	byteNym, err := protobuf.Encode(&SecretList{plist})
+	if err != nil {
+		panic(err.Error())
+	}
+	return byteNym
+}
+
+func ProtobufDecodeSecretList(bytes []byte) []abstract.Secret {
+	var aSecret abstract.Secret
+	var tSecret = reflect.TypeOf(&aSecret).Elem()
+	suite := nist.NewAES128SHA256QR512()
+	cons := protobuf.Constructors {
+		tSecret: func()interface{} { return suite.Secret() },
+	}
+
+	var msg SecretList
+	if err := protobuf.DecodeWithConstructors(bytes, &msg, cons); err != nil {
+		log.Fatal(err)
+	}
+	return msg.Secrets
+}
+
 func ByteToInt(b []byte) int {
 	myInt:= binary.BigEndian.Uint32(b)
 

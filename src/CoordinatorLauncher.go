@@ -59,11 +59,13 @@ func initCoordinator() {
 		G: nil,
 		Clients: make(map[string]*net.UDPAddr),
 		BeginningKeyMap: make(map[string]abstract.Point),
-		BeginningMap: make(map[string]abstract.Point),
+		BeginningCommMap: make(map[string]abstract.Point),
+		BeginningEMap: make(map[string]abstract.Secret),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
-		EndingMap: make(map[string]abstract.Point),
+		EndingCommMap: make(map[string]abstract.Point),
 		EndingKeyMap: make(map[string]abstract.Point),
+		EndingEMap: make(map[string]abstract.Secret),
 		ReputationDiffMap: make(map[string]int),
 		PedersenBase: pedersenBase,
 		FujiOkamBase: fujiokamBase,
@@ -111,20 +113,24 @@ func announce() {
 		return
 	}
 	// construct reputation list (public keys & reputation commitments)
-	size := len(anonCoordinator.BeginningMap)
-	keys := make([]abstract.Point,size)
-	vals := make([]abstract.Point,size)
+	size := len(anonCoordinator.BeginningCommMap)
+	keys := make([]abstract.Point, size)
+	vals := make([]abstract.Point, size)
+	Es := make([]abstract.Secret, size)
 	i := 0
-	for k, v := range anonCoordinator.BeginningMap {
+	for k, v := range anonCoordinator.BeginningCommMap {
 		keys[i] = anonCoordinator.BeginningKeyMap[k]
 		vals[i] = v
+		Es[i] = anonCoordinator.BeginningEMap[k]
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
 	byteVals := util.ProtobufEncodePointList(vals)
+	byteEs := util.ProtobufEncodeSecretList(Es)
 	params := map[string]interface{}{
 		"keys" : byteKeys,
 		"vals" : byteVals,
+		"Es": byteEs,
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:params}
 	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
@@ -142,29 +148,33 @@ func roundEnd() {
 	}
 	// add new clients into reputation map
 	for _,cdata := range anonCoordinator.NewClientsBuffer {
-		anonCoordinator.AddIntoDecryptedMap(cdata.Nym, cdata.PComm)
+		anonCoordinator.AddIntoDecryptedMap(cdata.Nym, cdata.PComm, cdata.E)
 	}
 	// add previous clients into reputation map
 	// construct the parameters
-	size := len(anonCoordinator.EndingMap)
-	keys := make([]abstract.Point,size)
-	vals := make([]abstract.Point,size)
+	size := len(anonCoordinator.EndingCommMap)
+	keys := make([]abstract.Point, size)
+	vals := make([]abstract.Point, size)
+	Es := make([]abstract.Secret, size)
 	i := 0
-	for k, v := range anonCoordinator.EndingMap {
+	for k, v := range anonCoordinator.EndingCommMap {
 		keys[i] = anonCoordinator.EndingKeyMap[k]
 		// update commitment by adding diff's commitment
 		diff := anonCoordinator.ReputationDiffMap[k]
 		diffSecret := anonCoordinator.Suite.Secret().SetInt64(int64(diff))
-		diffComm, _ := anonCoordinator.PedersenBase.Commit(diffSecret)
+		diffComm, rDiff := anonCoordinator.PedersenBase.Commit(diffSecret)
 		vals[i] = anonCoordinator.PedersenBase.Add(v, diffComm)
+		Es[i] = anonCoordinator.Suite.Secret().Add(anonCoordinator.EndingEMap[k], rDiff)
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
 	byteVals := util.ProtobufEncodePointList(vals)
+	byteEs := util.ProtobufEncodeSecretList(Es)
 	// send signal to server
 	pm := map[string]interface{} {
 		"keys" : byteKeys,
 		"vals" : byteVals,
+		"Es": byteEs,
 		"is_start" : true,
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}

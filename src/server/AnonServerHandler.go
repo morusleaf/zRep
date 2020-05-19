@@ -75,6 +75,7 @@ func handleRoundEnd(params map[string]interface{}) {
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	size := len(keyList)
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	if _, ok := params["is_start"]; ok {
 		// The request is sent by coordinator
 	} else {
@@ -87,22 +88,27 @@ func handleRoundEnd(params map[string]interface{}) {
 	X[0] = anonServer.PublicKey
 
 
-	newKeys := make([]abstract.Point,size)
-	newVals := make([]abstract.Point,size)
+	newKeys := make([]abstract.Point, size)
+	newVals := make([]abstract.Point, size)
+	newEs := make([]abstract.Secret, size)
 	for i := 0 ; i < size; i++ {
 		// decrypt the public key
 		newKeys[i] = anonServer.KeyMap[keyList[i].String()]
 		// randomize PComm
-		newVals[i], _ = anonServer.PedersenBase.Randomize(valList[i])
+		PComm, rPComm := anonServer.PedersenBase.Randomize(valList[i])
+		newVals[i] = PComm
+		newEs[i] = anonServer.Suite.Secret().Add(EList[i], rPComm)
 	}
 	byteNewKeys := util.ProtobufEncodePointList(newKeys)
 	byteNewVals := util.ProtobufEncodePointList(newVals)
+	byteNewEs := util.ProtobufEncodeSecretList(newEs)
 
 	if(size <= 1) {
 		// no need to shuffle, just send the package to next server
 		pm := map[string]interface{}{
 			"keys" : byteNewKeys,
 			"vals" : byteNewVals,
+			"Es": byteNewEs,
 		}
 		event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 		util.Send(anonServer.Socket, anonServer.PreviousHop, util.Encode(event))
@@ -127,13 +133,14 @@ func handleRoundEnd(params map[string]interface{}) {
 
 	// this is the shuffled key
 	finalKeys := convertToOrigin(Ybar, Ytmp)
-	finalVals := rebindReputation(newKeys,newVals, finalKeys)
+	finalVals, finalEs := rebindReputation(newKeys, newVals, newEs, finalKeys)
 
 	// send data to the next server
 	byteXbar := util.ProtobufEncodePointList(Xbar)
 	byteYbar := util.ProtobufEncodePointList(Ybar)
 	byteFinalKeys := util.ProtobufEncodePointList(finalKeys)
 	byteFinalVals := util.ProtobufEncodePointList(finalVals)
+	byteFinalEs := util.ProtobufEncodeSecretList(finalEs)
 	bytePublicKey, _ := anonServer.PublicKey.MarshalBinary()
 	// prev keys means the key before shuffle
 	pm := map[string]interface{}{
@@ -141,6 +148,7 @@ func handleRoundEnd(params map[string]interface{}) {
 		"ybar" : byteYbar,
 		"keys" : byteFinalKeys,
 		"vals" : byteFinalVals,
+		"Es": byteFinalEs,
 		"proof" : prf,
 		"prev_keys": byteOri,
 		"prev_vals": byteNewKeys,
@@ -162,17 +170,21 @@ func handleBroadcastPedersenH(params map[string]interface{}) {
 	anonServer.PedersenBase.H = h
 }
 
-func rebindReputation(newKeys []abstract.Point, newVals []abstract.Point, finalKeys []abstract.Point) ([]abstract.Point) {
+func rebindReputation(newKeys []abstract.Point, newVals []abstract.Point, newEs []abstract.Secret, finalKeys []abstract.Point) ([]abstract.Point, []abstract.Secret) {
 	size := len(newKeys)
-	ret := make([]abstract.Point,size)
-	m := make(map[string]abstract.Point)
+	finalVals := make([]abstract.Point, size)
+	mapVals := make(map[string]abstract.Point)
+	finalEs := make([]abstract.Secret, size)
+	mapEs := make(map[string]abstract.Secret)
 	for i := 0; i < size; i++ {
-		m[newKeys[i].String()] = newVals[i]
+		mapVals[newKeys[i].String()] = newVals[i]
+		mapEs[newKeys[i].String()] = newEs[i]
 	}
 	for i := 0; i < size; i++ {
-		ret[i] = m[finalKeys[i].String()]
+		finalVals[i] = mapVals[finalKeys[i].String()]
+		finalEs[i] = mapEs[finalKeys[i].String()]
 	}
-	return ret
+	return finalVals, finalEs
 }
 
 func convertToOrigin(YbarEn, Ytmp []abstract.Point) ([]abstract.Point){
@@ -241,6 +253,7 @@ func handleAnnouncement(params map[string]interface{}) {
 	var g abstract.Point = nil
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	size := len(keyList)
 
 	if val, ok := params["g"]; ok {
@@ -257,16 +270,20 @@ func handleAnnouncement(params map[string]interface{}) {
 
 	newKeys := make([]abstract.Point, size)
 	newVals := make([]abstract.Point, size)
+	newEs := make([]abstract.Secret, size)
 	for i := 0 ; i < len(keyList); i++ {
 		// encrypt the public key using modPow
 		newKeys[i] = anonServer.Suite.Point().Mul(keyList[i], anonServer.Roundkey)
 		// randomize PComm
-		newVals[i], _ = anonServer.PedersenBase.Randomize(valList[i])
+		PComm, rPComm := anonServer.PedersenBase.Randomize(valList[i])
+		newVals[i] = PComm
+		newEs[i] = anonServer.Suite.Secret().Add(EList[i], rPComm)
 		// update key map
 		anonServer.KeyMap[newKeys[i].String()] = keyList[i]
 	}
 	byteNewKeys := util.ProtobufEncodePointList(newKeys)
 	byteNewVals := util.ProtobufEncodePointList(newVals)
+	byteNewEs := util.ProtobufEncodeSecretList(newEs)
 	byteG, err := g.MarshalBinary()
 	util.CheckErr(err)
 
@@ -275,6 +292,7 @@ func handleAnnouncement(params map[string]interface{}) {
 		pm := map[string]interface{}{
 			"keys" : byteNewKeys,
 			"vals" : byteNewVals,
+			"Es": byteNewEs,
 			"g" : byteG,
 		}
 		event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
@@ -298,13 +316,14 @@ func handleAnnouncement(params map[string]interface{}) {
 
 	// this is the shuffled key
 	finalKeys := convertToOrigin(Ybar, Ytmp)
-	finalVals := rebindReputation(newKeys, newVals, finalKeys)
+	finalVals, finalEs := rebindReputation(newKeys, newVals, newEs, finalKeys)
 
 	// send data to the next server
 	byteXbar := util.ProtobufEncodePointList(Xbar)
 	byteYbar := util.ProtobufEncodePointList(Ybar)
 	byteFinalKeys := util.ProtobufEncodePointList(finalKeys)
 	byteFinalVals := util.ProtobufEncodePointList(finalVals)
+	byteFinalEs := util.ProtobufEncodeSecretList(finalEs)
 	bytePublicKey, _ := anonServer.PublicKey.MarshalBinary()
 	// prev keys means the key before shuffle
 	pm := map[string]interface{}{
@@ -312,10 +331,11 @@ func handleAnnouncement(params map[string]interface{}) {
 		"ybar" : byteYbar,
 		"keys" : byteFinalKeys,
 		"vals" : byteFinalVals,
+		"Es": byteFinalEs,
 		"proof" : prf,
 		"prev_keys": byteOri,
 		"prev_vals": byteNewKeys,
-		"shuffled":true,
+		"shuffled": true,
 		"public_key" : bytePublicKey,
 		"g" : byteG,
 	}

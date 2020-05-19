@@ -78,12 +78,14 @@ func handleAnnouncement(params map[string]interface{}) {
 	//construct Decrypted reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	anonCoordinator.EndingMap = make(map[string]abstract.Point)
+	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
+	anonCoordinator.EndingCommMap = make(map[string]abstract.Point)
 	anonCoordinator.EndingKeyMap = make(map[string]abstract.Point)
+	anonCoordinator.EndingEMap = make(map[string]abstract.Secret)
 	anonCoordinator.ReputationDiffMap = make(map[string]int)
 
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i])
+		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i], EList[i])
 	}
 
 	// distribute g and table to user
@@ -91,6 +93,7 @@ func handleAnnouncement(params map[string]interface{}) {
 		"g": params["g"].([]byte),
 		"keys": params["keys"].([]byte),
 		"vals": params["vals"].([]byte),
+		"Es": params["Es"].([]byte),
 	}
 
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
@@ -229,7 +232,7 @@ func handleMsg(params map[string]interface{}) {
 	err = PCommd.UnmarshalBinary(params["PCommd"].([]byte))
 	util.CheckErr(err)
 	pedersenBase := anonCoordinator.PedersenBase
-	PCommr := anonCoordinator.EndingMap[nym.String()]
+	PCommr := anonCoordinator.EndingCommMap[nym.String()]
 	myPCommd := pedersenBase.Sub(PCommr, PCommind)
 	if !PCommd.Equal(myPCommd) {
 		fmt.Println("[note]** PCommd != PCoomind^-1 * PCommr (mod p)")
@@ -326,11 +329,14 @@ func handleRoundEnd(params map[string]interface{}) {
 	// review reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	anonCoordinator.BeginningMap = make(map[string]abstract.Point)
+	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
+	anonCoordinator.BeginningCommMap = make(map[string]abstract.Point)
 	anonCoordinator.BeginningKeyMap = make(map[string]abstract.Point)
+	anonCoordinator.BeginningEMap = make(map[string]abstract.Secret)
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.BeginningMap[keyList[i].String()] = valList[i]
+		anonCoordinator.BeginningCommMap[keyList[i].String()] = valList[i]
 		anonCoordinator.BeginningKeyMap[keyList[i].String()] = keyList[i]
+		anonCoordinator.BeginningEMap[keyList[i].String()] = EList[i]
 	}
 
 	size := len(anonCoordinator.ReputationDiffMap)
