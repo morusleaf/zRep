@@ -15,6 +15,7 @@ import (
 
 	"github.com/dedis/crypto/random"
 	"../primitive/fujiokam"
+	"../primitive/pedersen_fujiokam"
 )
 
 func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
@@ -96,6 +97,27 @@ func DecodeARGnonneg(data []byte) *fujiokam.ARGnonneg {
 	return arg
 }
 
+func EncodeARGequal(arg *pedersen_fujiokam.ARGequal) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(arg)
+	if err != nil {
+		panic(err.Error())
+	}
+	return buf.Bytes()
+}
+
+func DecodeARGequal(data []byte) *pedersen_fujiokam.ARGequal {
+	arg := new(pedersen_fujiokam.ARGequal)
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(arg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return arg
+}
+
 func ProtobufEncodePointList(plist []abstract.Point) []byte {
 	byteNym, err := protobuf.Encode(&PointList{plist})
 	if err != nil {
@@ -154,13 +176,13 @@ func IntToByte(n int) []byte {
 	return buf
 }
 
-func FindPointUsingKeyList(keyList, valList []abstract.Point, nym abstract.Point) abstract.Point {
+func FindCommUsingKeyList(keyList, valList []abstract.Point, EList []abstract.Secret, nym abstract.Point) (abstract.Point, abstract.Secret) {
 	for i, k := range keyList {
 		if nym.Equal(k) {
-			return valList[i]
+			return valList[i], EList[i]
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func FindIntUsingKeyList(keyList []abstract.Point, diffList []int, nym abstract.Point) int {

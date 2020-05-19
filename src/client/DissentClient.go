@@ -23,6 +23,7 @@ type DissentClient struct {
 	Reputation int
 
 	PCommr abstract.Point
+	E abstract.Secret
 	FujiOkamBase *fujiokam.FujiOkamBase
 	PedersenBase *pedersen.PedersenBase
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 	"math/big"
 	"./primitive/pedersen"
+	"./primitive/pedersen_fujiokam"
 )
 
 // pointer to client itself
@@ -60,10 +61,10 @@ func sendMsg(ind int, text string) {
 	}
 	d := dissentClient.Reputation - ind
 	bigD := new(big.Int).SetInt64(int64(d))
+	xD := dissentClient.Suite.Secret().SetInt64(int64(d))
 
 	// compute PComm for d
 	PCommr := dissentClient.PCommr
-	fmt.Println("PCommr", PCommr)
 	xind := dissentClient.Suite.Secret().SetInt64(int64(ind))
 	PCommind, rind := dissentClient.PedersenBase.Commit(xind)
 	PCommd := dissentClient.PedersenBase.Sub(PCommr, PCommind)
@@ -75,8 +76,13 @@ func sendMsg(ind int, text string) {
 	util.CheckErr(err)
 
 	// generate ARGnonneg
-	FOCommd, rFO := dissentClient.FujiOkamBase.Commit(bigD)
-	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFO)
+	FOCommd, rFOCommd := dissentClient.FujiOkamBase.Commit(bigD)
+	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFOCommd)
+
+	// generate ARGequal
+	rd := dissentClient.Suite.Secret().Sub(dissentClient.E, rind)
+	ARGequal := pedersen_fujiokam.ProveEqual(dissentClient.PedersenBase, dissentClient.FujiOkamBase, xD, PCommd, rd, FOCommd, rFOCommd)
+	fmt.Println("ARGequal", ARGequal)
 
 	// generate signature
 	rand := dissentClient.Suite.Cipher([]byte("example"))
@@ -94,6 +100,7 @@ func sendMsg(ind int, text string) {
 		"PCommind": bytePCommind,
 		"rind": byteRind,
 		"arg_nonneg": util.EncodeARGnonneg(ARGnonneg),
+		"arg_equal": util.EncodeARGequal(ARGequal),
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
 	// send to coordinator
@@ -134,7 +141,7 @@ func sendVote(msgID, vote int) {
 /**
   * initialize anonClient and encrypted parameters
   */
-func initServer() {
+func initClient() {
 	// load controller ip and port
 	config := util.ReadConfig()
 	ServerAddr,err := net.ResolveUDPAddr("udp", config["coordinator_ip"]+":"+ config["coordinator_port"])
@@ -153,6 +160,7 @@ func initServer() {
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
 		Reputation: 0,
+		E: nil,
 		FujiOkamBase: nil,
 		PedersenBase: pedersen.CreateBaseFromSuite(suite),
 	}
@@ -161,7 +169,7 @@ func initServer() {
 
 func launchClient() {
 	// initialize parameters and server configurations
-	initServer()
+	initClient()
 	fmt.Println("[debug] Client started...");
 	// make tcp connection to controller
 	conn, err := net.DialUDP("udp", nil, dissentClient.CoordinatorAddr)

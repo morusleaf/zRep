@@ -131,8 +131,9 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 
 	// update PComm
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
-	valList:= util.ProtobufDecodePointList(params["vals"].([]byte))
-	dissentClient.PCommr = util.FindPointUsingKeyList(keyList, valList, nym)
+	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
+	dissentClient.PCommr, dissentClient.E = util.FindCommUsingKeyList(keyList, valList, EList, nym)
 	if dissentClient.PCommr == nil {
 		panic(1)
 	}

@@ -1,8 +1,8 @@
 package pedersen_fujiokam
 
 import (
-	"./pedersen"
-	"./fujiokam"
+	"../pedersen"
+	"../fujiokam"
 	"math/big"
 	"github.com/dedis/crypto/abstract"
 	"github.com/dedis/crypto/random"

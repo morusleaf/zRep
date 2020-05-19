@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 	"github.com/dedis/crypto/abstract"
-	// "../primitive/fujiokam"
+	"../primitive/pedersen_fujiokam"
 	"math/big"
 )
 
@@ -245,12 +245,20 @@ func handleMsg(params map[string]interface{}) {
 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
 	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
 	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
-	res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg)
-	if res != true {
+	if res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg); res != true {
 		fmt.Println("[note]** Non-negative verification failed")
 		return
 	}
-	fmt.Println("[debug] FOComm check passed")
+	fmt.Println("[debug] Non-negative check passed")
+
+	// POComm for d
+	ARGequal := util.DecodeARGequal(params["arg_equal"].([]byte))
+	if res := pedersen_fujiokam.VerifyEqual(pedersenBase, fujiokamBase, PCommd, FOCommd, ARGequal); res != true {
+		fmt.Println("[note]** Equality verification failed")
+		return
+	}
+	fmt.Println("[debug] Equality check passed")
+
 
 	// add msg log
 	msgID := anonCoordinator.AddMsgLog(nym)
