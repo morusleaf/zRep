@@ -1,25 +1,39 @@
-# What's AnonCred
+# What's zRep
 
-AnonCred is a tool which makes user actions anonymous at anytime and anywhere in server clusters, while the clusters still maintain the ability to identify user actions based on its identity. A typical use case of it is anonymous voting. 
+zRep is a tool which makes user actions anonymous at anytime and anywhere in server clusters, while the clusters still maintain the ability to identify user actions based on its identity. A typical use case of it is anonymous voting. 
 
-## How to compile and run AnonCred
+## How to compile
 
-This is what you need to do to compile and run AnonCred:
+This is what you need to do to compile and run zRep:
 
-1.  Run `https://github.com/anonyreputation/anonCred.git` to download source code and binary file on github. 
+1.  Run `git clone git@github.com:morusleaf/zRep.git` to download source code and binary file on github. 
 
-2.  modify `config/local.properties` to config local port.      
+2.  Run `export GO111MODULE=on` to enable go-1.11 features.
+
+3.  Run `go get github.com/dedis/crypto@38ce20af` to install the cryptography library.
+    Run `go get github.com/dedis/protobuf` to install message encoding library.
+
+## How to configure and run
+
+This assumes you are using Linux.
+
+1.  modify `config/local.properties` to config local port.      
     modify `config/conn.properties` to config coordinator's ip and port. (for client and server only)
 
-3.  Run `go run src/Coordinator.go` to start coordinator.       
-    Run `go run src/DissentClient.go` to start client.     
-    Run `go run src/AnonServerLauncher.go` to start server.       
+2.  Enter root directory of zRep.
+    Run `sh coordinator.sh` to start coordinator.
 
-4.  Type `msg <msg_text>` to broadcast all the messages to clients or `vote <msg_id> <+-1>` to vote towards a specific message. (For client only)
+3.  Open other shell windows and run `sh server.sh` multiple times to add servers.
+
+4.  Type enter in coordinator's daemon to finish adding servers.
+
+5.  Open other windows to run `sh client.sh` at anytime to register new clients.
+
+6.  Type `msg <indicator> <msg_text>` to broadcast all the messages to clients or `vote <msg_id> <+-1>` to vote towards a specific message. (For client only)
 
         
 **Note**      
-Launch coordinator first. And then launch your server and it will be automatically registered to the coordinator based on configuration. After all the servers needed are launched, type ‘ok’ in coordinator daemon to finish the server configuration. After that, you can launch client at anytime you want, but can no longer add server into the cluster.
+Launch coordinator first. And then launch your server and it will be automatically registered to the coordinator based on configuration. After all the servers needed are launched, type enter in coordinator daemon to finish the server configuration. After that, you can launch client at anytime you want, but can no longer add server into the cluster.
 
 
 
