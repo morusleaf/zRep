@@ -4,6 +4,7 @@ import (
 	"net"
 	"../primitive/pedersen"
 	"../primitive/fujiokam"
+	"math/big"
 )
 
 type ClientTuple struct {
@@ -52,6 +53,8 @@ type Coordinator struct {
 	PedersenBase *pedersen.PedersenBase
 	FujiOkamBase *fujiokam.FujiOkamBase
 
+	AllGnHonestyProofSecret []*big.Int
+	AllGnHonestyProofPublic []*big.Int
 }
 
 // get last server in topology

@@ -4,6 +4,7 @@ import (
 	"net"
 	"../primitive/fujiokam"
 	"../primitive/pedersen"
+	"math/big"
 )
 
 
@@ -26,4 +27,6 @@ type DissentClient struct {
 	E abstract.Secret
 	FujiOkamBase *fujiokam.FujiOkamBase
 	PedersenBase *pedersen.PedersenBase
+	AllGnHonestyProofPublic []*big.Int
+	AllGnHonestyChallenge []bool
 }

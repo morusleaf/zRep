@@ -32,3 +32,7 @@ const VOTE_REPLY = 13
 const MSG_REPLY = 14
 // broadcast h for Pedersen Commitment
 const BCAST_PEDERSEN_H = 15
+// challenge honesty for Fujisaki-Okamoto Commitment's configuration
+const GN_HONESTY_CHALLENGE = 16
+// answer for honesty challenge
+const GN_HONESTY_ANSWER = 17

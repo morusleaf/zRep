@@ -6,7 +6,7 @@ import (
 	"errors"
 	"github.com/dedis/crypto/abstract"
 	"encoding/binary"
-	"os"
+	// "os"
 	"net"
 	"encoding/gob"
 	"reflect"
@@ -16,6 +16,7 @@ import (
 	"github.com/dedis/crypto/random"
 	"../primitive/fujiokam"
 	"../primitive/pedersen_fujiokam"
+	"math/big"
 )
 
 func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
@@ -51,30 +52,81 @@ func SendToCoodinator(conn *net.UDPConn, content []byte) {
 func CheckErr(err error) {
 	if err != nil {
 		panic(err.Error())
-		os.Exit(1)
+		// os.Exit(1)
 	}
 }
 
-func EncodeIntArray(arr []int) []byte {
+// ****************************************************************************
+// Gn honesty proof
+// ****************************************************************************
+
+func EncodeBigInt(arg *big.Int) []byte {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
-	err := encoder.Encode(arr)
+	err := encoder.Encode(arg)
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 	return buf.Bytes()
 }
 
-func DecodeIntArray(data []byte) []int {
-	var arr []int
+func DecodeBigInt(data []byte) *big.Int {
+	arg := new(big.Int)
 	buf := bytes.NewReader(data)
 	decoder := gob.NewDecoder(buf)
-	err := decoder.Decode(&arr)
+	err := decoder.Decode(arg)
+	if err != nil {
+		panic(err)
+	}
+	return arg
+}
+
+func ProtobufEncodeBoolList(list []bool) []byte {
+	byteNym, err := protobuf.Encode(&BoolList{list})
+	if err != nil {
+		panic(err.Error())
+	}
+	return byteNym
+}
+
+func ProtobufDecodeBoolList(bytes []byte) []bool {
+	var aPoint bool
+	var tPoint = reflect.TypeOf(&aPoint).Elem()
+	cons := protobuf.Constructors {
+		tPoint: func()interface{} { return true },
+	}
+
+	var msg BoolList
+	if err := protobuf.DecodeWithConstructors(bytes, &msg, cons); err != nil {
+		panic(err)
+	}
+	return msg.Bools
+}
+
+func ProtobufEncodeBigIntList(ints []*big.Int) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(ints)
+	if err != nil {
+		panic(err.Error())
+	}
+	return buf.Bytes()
+}
+
+func ProtobufDecodeBigIntList(data []byte) []*big.Int {
+	var arg []*big.Int
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(&arg)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return arr
+	return arg
 }
+
+// ****************************************************************************
+// Non-negative argument for Fujisaki-Okamoto commitment
+// ****************************************************************************
 
 func EncodeARGnonneg(arg *fujiokam.ARGnonneg) []byte {
 	var buf bytes.Buffer
@@ -97,6 +149,10 @@ func DecodeARGnonneg(data []byte) *fujiokam.ARGnonneg {
 	return arg
 }
 
+// ****************************************************************************
+// Equality argument for Pedersen and Fujisaki-Okamoto commitments
+// ****************************************************************************
+
 func EncodeARGequal(arg *pedersen_fujiokam.ARGequal) []byte {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
@@ -116,6 +172,31 @@ func DecodeARGequal(data []byte) *pedersen_fujiokam.ARGequal {
 		log.Fatal(err)
 	}
 	return arg
+}
+
+// ****************************************************************************
+// Encode list
+// ****************************************************************************
+
+func EncodeIntArray(arr []int) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(arr)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func DecodeIntArray(data []byte) []int {
+	var arr []int
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(&arr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return arr
 }
 
 func ProtobufEncodePointList(plist []abstract.Point) []byte {

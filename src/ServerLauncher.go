@@ -34,13 +34,13 @@ func serverRegister() {
  */
 func startAnonServerListener() {
 	fmt.Println("[debug] AnonServer Listener started...");
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	for {
 		n,addr,err := anonServer.Socket.ReadFromUDP(buf)
 		if err != nil {
 			log.Fatal(err)
 		}
-		server.Handle(buf,addr,anonServer,n)
+		server.Handle(buf, addr, anonServer, n)
 	}
 }
 

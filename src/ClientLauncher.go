@@ -41,7 +41,7 @@ func register() {
   */
 func startClientListener() {
 	fmt.Println("[debug] Client Listener started...");
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	for {
 		n,addr,err := dissentClient.Socket.ReadFromUDP(buf)
 		if err != nil {
@@ -82,7 +82,6 @@ func sendMsg(ind int, text string) {
 	// generate ARGequal
 	rd := dissentClient.Suite.Secret().Sub(dissentClient.E, rind)
 	ARGequal := pedersen_fujiokam.ProveEqual(dissentClient.PedersenBase, dissentClient.FujiOkamBase, xD, PCommd, rd, FOCommd, rFOCommd)
-	fmt.Println("ARGequal", ARGequal)
 
 	// generate signature
 	rand := dissentClient.Suite.Cipher([]byte("example"))
@@ -171,7 +170,7 @@ func launchClient() {
 	// initialize parameters and server configurations
 	initClient()
 	fmt.Println("[debug] Client started...");
-	// make tcp connection to controller
+	// make udp connection to controller
 	conn, err := net.DialUDP("udp", nil, dissentClient.CoordinatorAddr)
 	util.CheckErr(err)
 	// set socket

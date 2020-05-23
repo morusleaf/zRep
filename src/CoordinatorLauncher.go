@@ -26,11 +26,11 @@ var anonCoordinator *coordinator.Coordinator
   */
 func startServerListener() {
 	fmt.Println("[debug] Coordinator server listener started...");
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	for {
 		n,addr,err := anonCoordinator.Socket.ReadFromUDP(buf)
 		util.CheckErr(err)
-		coordinator.Handle(buf,addr,anonCoordinator,n)
+		coordinator.Handle(buf, addr, anonCoordinator, n)
 	}
 }
 
@@ -40,13 +40,14 @@ func startServerListener() {
 func initCoordinator() {
 	config := util.ReadConfig()
 	fmt.Println(config)
-	ServerAddr,err := net.ResolveUDPAddr("udp","127.0.0.1:"+config["local_port"])
+	ServerAddr,err := net.ResolveUDPAddr("udp", "127.0.0.1:"+config["local_port"])
 	util.CheckErr(err)
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	pedersenBase := pedersen.CreateBaseFromSuite(suite)
 	fujiokamBase := fujiokam.CreateBaseFromSuite(suite)
+	prfSecret, prfPublic := fujiokamBase.GenerateAllGnHonestyProof()
 
 	anonCoordinator = &coordinator.Coordinator{
 		LocalAddr: ServerAddr,
@@ -69,6 +70,8 @@ func initCoordinator() {
 		ReputationDiffMap: make(map[string]int),
 		PedersenBase: pedersenBase,
 		FujiOkamBase: fujiokamBase,
+		AllGnHonestyProofSecret: prfSecret,
+		AllGnHonestyProofPublic: prfPublic,
 	}
 }
 
@@ -178,7 +181,7 @@ func roundEnd() {
 		"is_start" : true,
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-	util.Send(anonCoordinator.Socket,lastServer,util.Encode(event))
+	util.Send(anonCoordinator.Socket, lastServer, util.Encode(event))
 
 }
 
@@ -205,7 +208,7 @@ func launchCoordinator() {
 	// init coordinator
 	initCoordinator()
 	// bind to socket
-	conn, err := net.ListenUDP("udp",anonCoordinator.LocalAddr )
+	conn, err := net.ListenUDP("udp", anonCoordinator.LocalAddr )
 	util.CheckErr(err)
 	anonCoordinator.Socket = conn
 	// start listener
@@ -220,11 +223,11 @@ func launchCoordinator() {
 	anonCoordinator.Status = coordinator.READY_FOR_NEW_ROUND
 	for {
 		// wait for the status changed to READY_FOR_NEW_ROUND
-		for i := 0; i < 100; i++ {
+		for {
 			if anonCoordinator.Status == coordinator.READY_FOR_NEW_ROUND {
 				break
 			}
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 		// clear buffer at the beginning of each round
 		clearBuffer()

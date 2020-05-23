@@ -12,17 +12,20 @@ import (
 	// "github.com/dedis/crypto/abstract"
 )
 
-func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
+func Handle(buf []byte, addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 	// decode the whole message
 	event := &proto.Event{}
 	err := gob.NewDecoder(bytes.NewReader(buf[:n])).Decode(event)
 	util.CheckErr(err)
 	switch event.EventType {
 	case proto.CLIENT_REGISTER_CONFIRMATION:
-		handleRegisterConfirmation(event.Params, dissentClient);
+		handleRegisterConfirmation(event.Params, dissentClient)
+		break
+	case proto.GN_HONESTY_ANSWER:
+		handleGnHonestyAnswer(event.Params, dissentClient)
 		break
 	case proto.ANNOUNCEMENT:
-		handleAnnouncement(event.Params, dissentClient);
+		handleAnnouncement(event.Params, dissentClient)
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, dissentClient)
@@ -46,8 +49,7 @@ func Handle(buf []byte,addr *net.UDPAddr, dissentClient *DissentClient, n int) {
 
 }
 
-
-// print out register success info
+// handle protocols' configurations
 func handleRegisterConfirmation(params map[string]interface{}, dissentClient *DissentClient) {
 	dissentClient.Status = CONNECTED
 
@@ -62,6 +64,7 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	base.G6 = base.Point().FromBinary(params["g6"].([]byte))
 	base.H1 = base.Point().FromBinary(params["h1"].([]byte))
 	dissentClient.FujiOkamBase = base
+	dissentClient.AllGnHonestyProofPublic = util.ProtobufDecodeBigIntList(params["honesty_prf"].([]byte))
 
 	// Pedersen
 	var H = dissentClient.Suite.Point()
@@ -70,8 +73,26 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	util.CheckErr(err)
 	dissentClient.PedersenBase.H = H
 
-	// simply print out register success info here
-	fmt.Println("[client] Register success. Waiting for new round begin...");
+	// send challenge for g1~g6
+	fmt.Println("[debug] Received configurations, start challenging...")
+	dissentClient.AllGnHonestyChallenge = base.ChallengeAllGnHonesty()
+	pm := map[string]interface{}{
+		"honesty_chal": util.ProtobufEncodeBoolList(dissentClient.AllGnHonestyChallenge),
+	}
+	event := &proto.Event{EventType:proto.GN_HONESTY_CHALLENGE, Params:pm}
+	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+}
+
+// check if protocol's parameters are chosen honestly
+func handleGnHonestyAnswer(params map[string]interface{}, dissentClient *DissentClient) {
+	base := dissentClient.FujiOkamBase
+	answer := util.ProtobufDecodeBigIntList(params["honesty_ans"].([]byte))
+	fmt.Println("[debug] Received answer, start checking...")
+	res := base.CheckAllGnHonesty(answer, dissentClient.AllGnHonestyChallenge, dissentClient.AllGnHonestyProofPublic)
+	if res != 0 {
+		panic("Honesty checking failed")
+	}
+	fmt.Println("[debug] Parameters g1~g6 passed honesty test.")
 }
 
 // handle vote start event

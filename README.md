@@ -4,18 +4,19 @@ zRep is a tool which makes user actions anonymous at anytime and anywhere in ser
 
 ## How to compile
 
-This is what you need to do to compile and run zRep:
-
 1.  Run `git clone git@github.com:morusleaf/zRep.git` to download source code and binary file on github. 
 
-2.  Run `export GO111MODULE=on` to enable go-1.11 features.
+2.  Install go language (version >= 1.11).
 
-3.  Run `go get github.com/dedis/crypto@38ce20af` to install the cryptography library.
+3.  Run `export GO111MODULE=on` to enable go 1.11 features.
+
+4.  Run `go get github.com/dedis/crypto@38ce20af` to install dependent cryptography library.
+
     Run `go get github.com/dedis/protobuf` to install message encoding library.
 
 ## How to configure and run
 
-This assumes you are using Linux.
+The following assumes you are using Linux.
 
 1.  modify `config/local.properties` to config local port.      
     modify `config/conn.properties` to config coordinator's ip and port. (for client and server only)
@@ -25,9 +26,9 @@ This assumes you are using Linux.
 
 3.  Open other shell windows and run `sh server.sh` multiple times to add servers.
 
-4.  Type enter in coordinator's daemon to finish adding servers.
+4.  Type enter in coordinator's daemon to finish adding servers. (You will also need to type enter within this daemon to control phase changing)
 
-5.  Open other windows to run `sh client.sh` at anytime to register new clients.
+5.  Open other windows and run `sh client.sh` at anytime to register new clients.
 
 6.  Type `msg <indicator> <msg_text>` to broadcast all the messages to clients or `vote <msg_id> <+-1>` to vote towards a specific message. (For client only)
 

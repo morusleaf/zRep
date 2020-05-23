@@ -3,10 +3,6 @@ package fujiokam
 import (
 	"testing"
 	"math/big"
-	"github.com/dedis/protobuf"
-	"fmt"
-	"encoding/gob"
-	"bytes"
 )
 
 func TestDecomposeThreeSquare(t *testing.T) {
@@ -43,84 +39,40 @@ func TestZero(t *testing.T) {
 	}
 }
 
-func ProtobufEncodeARGnonneg(arg *ARGnonneg) []byte {
-	data, err := protobuf.Encode(arg)
-	if err != nil {
-		panic(err.Error())
+func TestGnHonestyProof(t *testing.T) {
+	// server generate
+	base := CreateBase()
+	secrets := make([]*big.Int, GN_HONESTY_PROOF_SIZE)
+	publics := make([]*Point, GN_HONESTY_PROOF_SIZE)
+	base.GenerateGnHonestyProof(secrets, publics)
+
+	// client generates bits
+	bits := make([]bool, GN_HONESTY_PROOF_SIZE)
+	base.ChallengeGnHonesty(bits)
+
+	// server answers
+	answers := make([]*big.Int, GN_HONESTY_PROOF_SIZE)
+	base.AnswerGnHonesty(bits, secrets, base.alpha1, answers)
+
+	// clients checks
+	if !base.CheckGnHonesty(answers, bits, publics, base.G1) {
+		t.Error("Check failed")
 	}
-	return data
 }
 
-func ProtobufDecodeARGnonneg(bytes []byte) *ARGnonneg {
-	arg := new(ARGnonneg)
-	if err := protobuf.Decode(bytes, arg); err != nil {
-		panic(1)
+func TestAllGnHonestyProof(t *testing.T) {
+	// server generate
+	base := CreateBase()
+	secrets, publics := base.GenerateAllGnHonestyProof()
+
+	// client generates bits
+	challenges := base.ChallengeAllGnHonesty()
+
+	// server answers
+	answers := base.AnswerAllGnHonesty(challenges, secrets, publics)
+
+	// clients checks
+	if res := base.CheckAllGnHonesty(answers, challenges, publics); res != 0 {
+		t.Error("Check failed on", res)
 	}
-	return arg
-}
-
-type AAA struct {
-	x []byte
-}
-
-type ByteArray struct {
-	Arr []byte
-}
-
-func Encode(event interface{}) []byte {
-	var network bytes.Buffer
-	err := gob.NewEncoder(&network).Encode(event)
-	if err != nil {
-		panic(err)
-	}
-	return network.Bytes()
-}
-
-type Event struct {
-	x *big.Int
-}
-
-type ARG struct {
-	X1 *big.Int
-	X2 *big.Int
-	X3 *big.Int
-}
-
-func TestEncodingARG(t *testing.T) {
-	var network bytes.Buffer
-	encoder := gob.NewEncoder(&network)
-	decoder := gob.NewDecoder(&network)
-
-	arg := &ARG {
-		X1: new(big.Int).SetInt64(0),
-		X2: new(big.Int).SetInt64(10),
-		X3: new(big.Int).SetInt64(-5),
-	}
-	fmt.Println(arg.X1, arg.X2, arg.X3)
-	
-	err := encoder.Encode(arg)
-	fmt.Println(err)
-	fmt.Println(network.Bytes())
-
-	var rcv ARG
-	
-	decoder.Decode(&rcv)
-	fmt.Println(rcv.X1, rcv.X2, rcv.X3)
-}
-
-func TestEncoding(t *testing.T) {
-	x := []int{0,1,2,3}
-	fmt.Println(x)
-	var network bytes.Buffer
-	encoder := gob.NewEncoder(&network)
-	err := encoder.Encode(x)
-	if err != nil {
-		t.Error(err)
-	}
-	fmt.Println(network.Bytes())
-
-	var y []int
-	decoder := gob.NewDecoder(&network)
-	decoder.Decode(&y)
-	fmt.Println(y)
 }

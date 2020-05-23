@@ -23,7 +23,7 @@ var srcAddr *net.UDPAddr
 
 // Handle Use tmpCoordinator to handle data sent from addr.
 // The data is stored at buf[:n]
-func Handle(buf []byte,addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
+func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 	// decode the whole message
 	anonCoordinator = tmpCoordinator
 	srcAddr = addr
@@ -40,6 +40,9 @@ func Handle(buf []byte,addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 		break
 	case proto.CLIENT_REGISTER_SERVERSIDE:
 		handleClientRegisterServerSide(event.Params);
+		break
+	case proto.GN_HONESTY_CHALLENGE:
+		handleGnHonestyChallenge(event.Params, addr)
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params)
@@ -130,7 +133,7 @@ func handleServerRegister() {
 		"prev_server": lastServer.String(),
 	}
 	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
-	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event1))
+	util.Send(anonCoordinator.Socket, srcAddr, util.Encode(event1))
 
 	anonCoordinator.AddServer(srcAddr);
 }
@@ -182,6 +185,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	byteH, err := anonCoordinator.PedersenBase.H.MarshalBinary()
 	util.CheckErr(err)
 
+	// send protocol configuration to client
 	var addrStr = params["addr"].(string)
 	addr,err := net.ResolveUDPAddr("udp", addrStr)
 	util.CheckErr(err)
@@ -195,6 +199,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"g5": fujiokamBase.G5.ToBinary(),
 		"g6": fujiokamBase.G6.ToBinary(),
 		"h1": fujiokamBase.H1.ToBinary(),
+		"honesty_prf": util.ProtobufEncodeBigIntList(anonCoordinator.AllGnHonestyProofPublic),
 		"h": byteH,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
@@ -202,6 +207,19 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
 	anonCoordinator.AddClientInBuffer(nym, PComm, E)
+}
+
+func handleGnHonestyChallenge(params map[string]interface{}, addr *net.UDPAddr) {
+	challenge := util.ProtobufDecodeBoolList(params["honesty_chal"].([]byte))
+	fmt.Println("[debug] Received challenge, start answering...")
+	base := anonCoordinator.FujiOkamBase
+	answer := base.AnswerAllGnHonesty(challenge, anonCoordinator.AllGnHonestyProofSecret, anonCoordinator.AllGnHonestyProofPublic)
+	
+	pm := map[string]interface{}{
+		"honesty_ans": util.ProtobufEncodeBigIntList(answer),
+	}
+	event := &proto.Event{EventType:proto.GN_HONESTY_ANSWER, Params:pm}
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 }
 
 // verify the msg and broadcast to clients
@@ -244,7 +262,7 @@ func handleMsg(params map[string]interface{}) {
 	fujiokamBase := anonCoordinator.FujiOkamBase
 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
 	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
-	FOCommd := fujiokamBase.Point().BigInt(FOCommdV)
+	FOCommd := fujiokamBase.Point().SetBigInt(FOCommdV)
 	if res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg); res != true {
 		fmt.Println("[note]** Non-negative verification failed")
 		return
