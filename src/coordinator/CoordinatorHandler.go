@@ -40,7 +40,7 @@ func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 		handleUpdatePedersenH(event.Params)
 		break
 	case proto.CLIENT_REGISTER_CONTROLLERSIDE:
-		handleClientRegisterControllerSide(event.Params);
+		handleClientRegisterControllerSide(event.Params, addr)
 		break
 	case proto.CLIENT_REGISTER_SERVERSIDE:
 		handleClientRegisterServerSide(event.Params);
@@ -72,39 +72,40 @@ func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 func handleAnnouncement(params map[string]interface{}) {
 	// This event is triggered when server finishes announcement
 	// distribute final reputation map to servers
-	if len(params["keys"].([]byte)) == 0 {
-		// suggest there is no client
-		anonCoordinator.Status = MESSAGE
-		return
-	}
-	var g = anonCoordinator.Suite.Point()
-	byteG := params["g"].([]byte)
-	err := g.UnmarshalBinary(byteG)
-	util.CheckErr(err)
+	// if len(params["keys"].([]byte)) == 0 {
+	// 	// suggest there is no client
+	// 	anonCoordinator.Status = MESSAGE
+	// 	return
+	// }
+	g := util.DecodePoint(anonCoordinator.Suite, params["g"].([]byte))
 	anonCoordinator.LRSBase = lrs.CreateBase(util.PointToBigInt(g))
+
+	// update GT & HT
+	GT := util.DecodePoint(anonCoordinator.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(anonCoordinator.Suite, params["HT"].([]byte))
+	anonCoordinator.PedersenBase.GT = GT
+	anonCoordinator.PedersenBase.HT = HT
 
 	//construct Decrypted reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	anonCoordinator.EndingCommMap = make(map[string]abstract.Point)
 	anonCoordinator.EndingKeyMap = make(map[string]abstract.Point)
-	anonCoordinator.EndingEMap = make(map[string]abstract.Secret)
 	anonCoordinator.ReputationDiffMap = make(map[string]int)
 	anonCoordinator.AllClientsPublicKeys = keyList
 
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.AddIntoEndingMap(keyList[i], valList[i], EList[i])
+		anonCoordinator.AddIntoEndingMap(keyList[i], valList[i])
 	}
 
-	// distribute g and table to user
+	// distribute g and table to clients
 	pm := map[string]interface{}{
 		"g": params["g"].([]byte),
 		"keys": params["keys"].([]byte),
 		"vals": params["vals"].([]byte),
-		"Es": params["Es"].([]byte),
+		"GT": params["GT"].([]byte),
+		"HT": params["HT"].([]byte),
 	}
-
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 	for _,addr := range anonCoordinator.Clients {
 		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
@@ -133,7 +134,7 @@ func handleServerRegister() {
 	if lastServer == nil {
 		lastServer = anonCoordinator.LocalAddr
 	}
-	byteH, err := anonCoordinator.PedersenBase.H.MarshalBinary()
+	byteH, err := anonCoordinator.PedersenBase.HT.MarshalBinary()
 	util.CheckErr(err)
 	// tell new server its prev_server is last server
 	pm1 := map[string]interface{}{
@@ -148,13 +149,13 @@ func handleServerRegister() {
 }
 
 func handleUpdatePedersenH(params map[string]interface{}) {
-	err := anonCoordinator.PedersenBase.H.UnmarshalBinary(params["h"].([]byte))
+	err := anonCoordinator.PedersenBase.HT.UnmarshalBinary(params["h"].([]byte))
 	util.CheckErr(err)
 }
 
 // Handler for REGISTER event
 // send the register request to server to do encryption
-func handleClientRegisterControllerSide(params map[string]interface{}) {
+func handleClientRegisterControllerSide(params map[string]interface{}, addr *net.UDPAddr) {
 	// get client's public key
 	publicKey := anonCoordinator.Suite.Point()
 	publicKey.UnmarshalBinary(params["public_key"].([]byte))
@@ -162,10 +163,8 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 
 	// compute Pedersen commitment
 	xInit := anonCoordinator.Suite.Secret().SetInt64(0)
-	PComm, E := anonCoordinator.PedersenBase.Commit(xInit)
-	bytePComm, err := PComm.MarshalBinary()
-	util.CheckErr(err)
-	byteE, err := E.MarshalBinary()
+	PComm, r := anonCoordinator.PedersenBase.Commit(xInit)
+	byteR, err := r.MarshalBinary()
 	util.CheckErr(err)
 
 	// send register info to the first server
@@ -173,11 +172,18 @@ func handleClientRegisterControllerSide(params map[string]interface{}) {
 	pm := map[string]interface{}{
 		"public_key": params["public_key"],
 		"addr": srcAddr.String(),
-		"pcomm": bytePComm,
-		"E": byteE,
+		"pcomm": util.EncodePoint(PComm),
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
+
+	// send initial r to client
+	pm = map[string]interface{}{
+		"r": byteR,
+		"g": util.EncodePoint(anonCoordinator.G),
+	}
+	event = &proto.Event{EventType:proto.INIT_PEDERSEN_R, Params:pm}
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 }
 
 // handle client register successful event
@@ -187,17 +193,14 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	byteNym := params["public_key"].([]byte)
 	nym.UnmarshalBinary(byteNym)
 
-	// get PComm and accumulated E from params (encrypted by all servers)
+	// get PComm
 	var PComm = anonCoordinator.Suite.Point()
 	err := PComm.UnmarshalBinary(params["pcomm"].([]byte))
 	util.CheckErr(err)
-	var E = anonCoordinator.Suite.Secret()
-	err = E.UnmarshalBinary(params["E"].([]byte))
-	util.CheckErr(err)
 
 	// encode h from Pedersen Commitment base
-	byteH, err := anonCoordinator.PedersenBase.H.MarshalBinary()
-	util.CheckErr(err)
+	// byteHT, err := anonCoordinator.PedersenBase.HT.MarshalBinary()
+	// util.CheckErr(err)
 
 	// send protocol configuration to client
 	var addrStr = params["addr"].(string)
@@ -214,13 +217,13 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"g6": fujiokamBase.G6.ToBinary(),
 		"h1": fujiokamBase.H1.ToBinary(),
 		"honesty_prf": util.ProtobufEncodeBigIntList(anonCoordinator.AllGnHonestyProofPublic),
-		"h": byteH,
+		// "h": byteHT,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
 	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 
 	// instead of sending new client to server, we will send it when finishing this round. Currently we just add it into buffer
-	anonCoordinator.AddClientInBuffer(nym, PComm, E)
+	anonCoordinator.AddClientInBuffer(nym, PComm)
 }
 
 func handleGnHonestyChallenge(params map[string]interface{}, addr *net.UDPAddr) {
@@ -343,7 +346,6 @@ func handleVote(params map[string]interface{}) {
 		return
 	}
 	sig := lrs.ProtobufDecodeSignature(byteSig)
-	fmt.Println("sig.Y0", sig.Y0)
 	res := anonCoordinator.LRSBase.Verify(util.IntToByte(msgID), len(anonCoordinator.AllClientsPublicKeys), index, sig, anonCoordinator.AllClientsPublicKeys)
 	var pm map[string]interface{}
 	if res == false {
@@ -381,15 +383,19 @@ func handleRoundEnd(params map[string]interface{}) {
 	// review reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	anonCoordinator.BeginningCommMap = make(map[string]abstract.Point)
 	anonCoordinator.BeginningKeyMap = make(map[string]abstract.Point)
-	anonCoordinator.BeginningEMap = make(map[string]abstract.Secret)
 	for i := 0; i < len(keyList); i++ {
 		anonCoordinator.BeginningCommMap[keyList[i].String()] = valList[i]
 		anonCoordinator.BeginningKeyMap[keyList[i].String()] = keyList[i]
-		anonCoordinator.BeginningEMap[keyList[i].String()] = EList[i]
 	}
+
+	// update GT & HT
+	GT := util.DecodePoint(anonCoordinator.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(anonCoordinator.Suite, params["HT"].([]byte))
+	anonCoordinator.PedersenBase.GT = GT
+	anonCoordinator.PedersenBase.HT = HT
+	// note: no need to tell clients yet
 
 	size := len(anonCoordinator.ReputationDiffMap)
 	keys := make([]abstract.Point,size)

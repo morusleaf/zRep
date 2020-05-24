@@ -26,7 +26,7 @@ type DissentClient struct {
 	Index int
 
 	PCommr abstract.Point
-	E abstract.Secret
+	R abstract.Secret
 	FujiOkamBase *fujiokam.FujiOkamBase
 	PedersenBase *pedersen.PedersenBase
 	AllGnHonestyProofPublic []*big.Int

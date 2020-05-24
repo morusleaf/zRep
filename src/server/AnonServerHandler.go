@@ -75,7 +75,6 @@ func handleRoundEnd(params map[string]interface{}) {
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	size := len(keyList)
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	if _, ok := params["is_start"]; ok {
 		// The request is sent by coordinator
 	} else {
@@ -87,28 +86,34 @@ func handleRoundEnd(params map[string]interface{}) {
 	X := make([]abstract.Point, 1)
 	X[0] = anonServer.PublicKey
 
+	// randomly select Ei
+	E := anonServer.Suite.Secret().Pick(random.Stream)
+
+	// update GT & HT
+	GT := util.DecodePoint(anonServer.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(anonServer.Suite, params["HT"].([]byte))
+	GT.Mul(GT, E)
+	HT.Mul(HT, E)
+
 
 	newKeys := make([]abstract.Point, size)
 	newVals := make([]abstract.Point, size)
-	newEs := make([]abstract.Secret, size)
 	for i := 0 ; i < size; i++ {
 		// decrypt the public key
 		newKeys[i] = anonServer.KeyMap[keyList[i].String()]
 		// randomize PComm
-		PComm, rPComm := anonServer.PedersenBase.Randomize(valList[i])
-		newVals[i] = PComm
-		newEs[i] = anonServer.Suite.Secret().Add(EList[i], rPComm)
+		newVals[i] = anonServer.Suite.Point().Mul(valList[i], E)
 	}
 	byteNewKeys := util.ProtobufEncodePointList(newKeys)
 	byteNewVals := util.ProtobufEncodePointList(newVals)
-	byteNewEs := util.ProtobufEncodeSecretList(newEs)
 
 	if(size <= 1) {
 		// no need to shuffle, just send the package to next server
 		pm := map[string]interface{}{
 			"keys" : byteNewKeys,
 			"vals" : byteNewVals,
-			"Es": byteNewEs,
+			"GT": util.EncodePoint(GT),
+			"HT": util.EncodePoint(HT),
 		}
 		event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 		util.Send(anonServer.Socket, anonServer.PreviousHop, util.Encode(event))
@@ -126,21 +131,20 @@ func handleRoundEnd(params map[string]interface{}) {
 
 	rand := anonServer.Suite.Cipher(abstract.RandomKey)
 	// *** perform neff shuffle here ***
-	Xbar, Ybar, _, Ytmp, prover := neffShuffle(Xori,newKeys,rand)
+	Xbar, Ybar, _, Ytmp, prover := neffShuffle(Xori,newKeys, rand)
 	prf, err := proof.HashProve(anonServer.Suite, "PairShuffle", rand, prover)
 	util.CheckErr(err)
 
 
 	// this is the shuffled key
 	finalKeys := convertToOrigin(Ybar, Ytmp)
-	finalVals, finalEs := rebindReputation(newKeys, newVals, newEs, finalKeys)
+	finalVals := rebindReputation(newKeys, newVals, finalKeys)
 
 	// send data to the next server
 	byteXbar := util.ProtobufEncodePointList(Xbar)
 	byteYbar := util.ProtobufEncodePointList(Ybar)
 	byteFinalKeys := util.ProtobufEncodePointList(finalKeys)
 	byteFinalVals := util.ProtobufEncodePointList(finalVals)
-	byteFinalEs := util.ProtobufEncodeSecretList(finalEs)
 	bytePublicKey, _ := anonServer.PublicKey.MarshalBinary()
 	// prev keys means the key before shuffle
 	pm := map[string]interface{}{
@@ -148,12 +152,13 @@ func handleRoundEnd(params map[string]interface{}) {
 		"ybar" : byteYbar,
 		"keys" : byteFinalKeys,
 		"vals" : byteFinalVals,
-		"Es": byteFinalEs,
 		"proof" : prf,
 		"prev_keys": byteOri,
 		"prev_vals": byteNewKeys,
-		"shuffled":true,
+		"shuffled": true,
 		"public_key" : bytePublicKey,
+		"GT": util.EncodePoint(GT),
+		"HT": util.EncodePoint(HT),
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 	util.Send(anonServer.Socket, anonServer.PreviousHop, util.Encode(event)) 
@@ -164,27 +169,20 @@ func handleRoundEnd(params map[string]interface{}) {
 }
 
 func handleBroadcastPedersenH(params map[string]interface{}) {
-	h := anonServer.PedersenBase.Suite.Point()
-	err := h.UnmarshalBinary(params["h"].([]byte))
-	util.CheckErr(err)
-	anonServer.PedersenBase.H = h
+	anonServer.PedersenBase.HT = util.DecodePoint(anonServer.Suite, params["h"].([]byte))
 }
 
-func rebindReputation(newKeys []abstract.Point, newVals []abstract.Point, newEs []abstract.Secret, finalKeys []abstract.Point) ([]abstract.Point, []abstract.Secret) {
+func rebindReputation(newKeys []abstract.Point, newVals []abstract.Point, finalKeys []abstract.Point) (finalVals []abstract.Point) {
 	size := len(newKeys)
-	finalVals := make([]abstract.Point, size)
+	finalVals = make([]abstract.Point, size)
 	mapVals := make(map[string]abstract.Point)
-	finalEs := make([]abstract.Secret, size)
-	mapEs := make(map[string]abstract.Secret)
 	for i := 0; i < size; i++ {
 		mapVals[newKeys[i].String()] = newVals[i]
-		mapEs[newKeys[i].String()] = newEs[i]
 	}
 	for i := 0; i < size; i++ {
 		finalVals[i] = mapVals[finalKeys[i].String()]
-		finalEs[i] = mapEs[finalKeys[i].String()]
 	}
-	return finalVals, finalEs
+	return finalVals
 }
 
 func convertToOrigin(YbarEn, Ytmp []abstract.Point) ([]abstract.Point){
@@ -212,29 +210,13 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	err := publicKey.UnmarshalBinary(params["public_key"].([]byte))
 	util.CheckErr(err)
 
-	PComm := anonServer.Suite.Point()
-	err = PComm.UnmarshalBinary(params["pcomm"].([]byte))
-	util.CheckErr(err)
-	E := anonServer.Suite.Secret()
-	err = E.UnmarshalBinary(params["E"].([]byte))
-	util.CheckErr(err)
-	// randomize PComm
-	nextPComm, rPComm := anonServer.PedersenBase.Randomize(PComm)
-	byteNextPComm, err := nextPComm.MarshalBinary()
-	util.CheckErr(err)
-	// accumulate E
-	E.Add(E, rPComm)
-	byteE, err := E.MarshalBinary()
-	util.CheckErr(err)
-
-	newKey := anonServer.Suite.Point().Mul(publicKey,anonServer.Roundkey)
+	newKey := anonServer.Suite.Point().Mul(publicKey, anonServer.Roundkey)
 	byteNewKey, err := newKey.MarshalBinary()
 	util.CheckErr(err)
 	pm := map[string]interface{}{
 		"public_key" : byteNewKey,
 		"addr" : params["addr"].(string),
-		"pcomm": byteNextPComm,
-		"E": byteE,
+		"pcomm": params["pcomm"].([]byte),
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
 	util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))
@@ -253,8 +235,9 @@ func handleAnnouncement(params map[string]interface{}) {
 	var g abstract.Point = nil
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	size := len(keyList)
+	GT := util.DecodePoint(anonServer.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(anonServer.Suite, params["HT"].([]byte))
 
 	if val, ok := params["g"]; ok {
 		// contains g
@@ -268,38 +251,41 @@ func handleAnnouncement(params map[string]interface{}) {
 		g = anonServer.Suite.Point().Mul(nil, anonServer.Roundkey)
 	}
 
+	// randomly pick Ei
+	E := anonServer.Suite.Secret().Pick(random.Stream)
+	// update GT & HT
+	GT.Mul(GT, E)
+	HT.Mul(HT, E)
+
+	// update table
 	newKeys := make([]abstract.Point, size)
 	newVals := make([]abstract.Point, size)
-	newEs := make([]abstract.Secret, size)
 	for i := 0 ; i < len(keyList); i++ {
 		// encrypt the public key using modPow
 		newKeys[i] = anonServer.Suite.Point().Mul(keyList[i], anonServer.Roundkey)
 		// randomize PComm
-		PComm, rPComm := anonServer.PedersenBase.Randomize(valList[i])
+		PComm := anonServer.Suite.Point().Mul(valList[i], E)
 		newVals[i] = PComm
-		newEs[i] = anonServer.Suite.Secret().Add(EList[i], rPComm)
 		// update key map
 		anonServer.KeyMap[newKeys[i].String()] = keyList[i]
 	}
 	byteNewKeys := util.ProtobufEncodePointList(newKeys)
 	byteNewVals := util.ProtobufEncodePointList(newVals)
-	byteNewEs := util.ProtobufEncodeSecretList(newEs)
-	byteG, err := g.MarshalBinary()
-	util.CheckErr(err)
+	byteG := util.EncodePoint(g)
 
 	if(size <= 1) {
 		// no need to shuffle, just send the package to next server
 		pm := map[string]interface{}{
 			"keys" : byteNewKeys,
 			"vals" : byteNewVals,
-			"Es": byteNewEs,
 			"g" : byteG,
+			"GT": util.EncodePoint(GT),
+			"HT": util.EncodePoint(HT),
 		}
 		event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 		util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))
 		return
 	}
-
 
 	Xori := make([]abstract.Point, len(newVals))
 	for i:=0; i < size; i++ {
@@ -316,14 +302,13 @@ func handleAnnouncement(params map[string]interface{}) {
 
 	// this is the shuffled key
 	finalKeys := convertToOrigin(Ybar, Ytmp)
-	finalVals, finalEs := rebindReputation(newKeys, newVals, newEs, finalKeys)
+	finalVals := rebindReputation(newKeys, newVals, finalKeys)
 
 	// send data to the next server
 	byteXbar := util.ProtobufEncodePointList(Xbar)
 	byteYbar := util.ProtobufEncodePointList(Ybar)
 	byteFinalKeys := util.ProtobufEncodePointList(finalKeys)
 	byteFinalVals := util.ProtobufEncodePointList(finalVals)
-	byteFinalEs := util.ProtobufEncodeSecretList(finalEs)
 	bytePublicKey, _ := anonServer.PublicKey.MarshalBinary()
 	// prev keys means the key before shuffle
 	pm := map[string]interface{}{
@@ -331,13 +316,14 @@ func handleAnnouncement(params map[string]interface{}) {
 		"ybar" : byteYbar,
 		"keys" : byteFinalKeys,
 		"vals" : byteFinalVals,
-		"Es": byteFinalEs,
 		"proof" : prf,
 		"prev_keys": byteOri,
 		"prev_vals": byteNewKeys,
 		"shuffled": true,
 		"public_key" : bytePublicKey,
 		"g" : byteG,
+		"GT": util.EncodePoint(GT),
+		"HT": util.EncodePoint(HT),
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
 	util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))

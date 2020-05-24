@@ -39,7 +39,6 @@ func startServerListener() {
   */
 func initCoordinator() {
 	config := util.ReadConfig()
-	fmt.Println(config)
 	ServerAddr,err := net.ResolveUDPAddr("udp", "127.0.0.1:"+config["local_port"])
 	util.CheckErr(err)
 	suite := nist.NewAES128SHA256QR512()
@@ -61,12 +60,10 @@ func initCoordinator() {
 		Clients: make(map[string]*net.UDPAddr),
 		BeginningKeyMap: make(map[string]abstract.Point),
 		BeginningCommMap: make(map[string]abstract.Point),
-		BeginningEMap: make(map[string]abstract.Secret),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
 		EndingCommMap: make(map[string]abstract.Point),
 		EndingKeyMap: make(map[string]abstract.Point),
-		EndingEMap: make(map[string]abstract.Secret),
 		ReputationDiffMap: make(map[string]int),
 		PedersenBase: pedersenBase,
 		FujiOkamBase: fujiokamBase,
@@ -78,10 +75,10 @@ func initCoordinator() {
 // config parameters for commitments
 func configCommParams() {
 	// Config Pedersen Commitment
-	h := anonCoordinator.PedersenBase.H
+	h := anonCoordinator.PedersenBase.HT
 	byteH, err := h.MarshalBinary()
 	util.CheckErr(err)
-	// broadcast hm
+	// broadcast hT
 	params := map[string]interface{}{
 		"h": byteH,
 	}
@@ -89,9 +86,6 @@ func configCommParams() {
 	for _, server := range anonCoordinator.ServerList {
 		util.Send(anonCoordinator.Socket, server, util.Encode(event))
 	}
-
-	// Config Fujisaki-Okamoto Commitment
-	// TODO: publish parameters and non-neg proof
 }
 
 /**
@@ -118,21 +112,19 @@ func announce() {
 	size := len(anonCoordinator.BeginningCommMap)
 	keys := make([]abstract.Point, size)
 	vals := make([]abstract.Point, size)
-	Es := make([]abstract.Secret, size)
 	i := 0
 	for k, v := range anonCoordinator.BeginningCommMap {
 		keys[i] = anonCoordinator.BeginningKeyMap[k]
 		vals[i] = v
-		Es[i] = anonCoordinator.BeginningEMap[k]
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
 	byteVals := util.ProtobufEncodePointList(vals)
-	byteEs := util.ProtobufEncodeSecretList(Es)
 	params := map[string]interface{}{
 		"keys" : byteKeys,
 		"vals" : byteVals,
-		"Es": byteEs,
+		"GT": util.EncodePoint(anonCoordinator.PedersenBase.GT),
+		"HT": util.EncodePoint(anonCoordinator.PedersenBase.HT),
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:params}
 	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
@@ -150,14 +142,14 @@ func roundEnd() {
 	}
 	// add new clients into reputation map
 	for _,cdata := range anonCoordinator.NewClientsBuffer {
-		anonCoordinator.AddIntoEndingMap(cdata.Nym, cdata.PComm, cdata.E)
+		anonCoordinator.AddIntoEndingMap(cdata.Nym, cdata.PComm)
 	}
 	// add previous clients into reputation map
 	// construct the parameters
 	size := len(anonCoordinator.EndingCommMap)
 	keys := make([]abstract.Point, size)
 	vals := make([]abstract.Point, size)
-	Es := make([]abstract.Secret, size)
+	rDiffs := make([]abstract.Secret, size)
 	i := 0
 	for k, v := range anonCoordinator.EndingCommMap {
 		keys[i] = anonCoordinator.EndingKeyMap[k]
@@ -166,22 +158,31 @@ func roundEnd() {
 		diffSecret := anonCoordinator.Suite.Secret().SetInt64(int64(diff))
 		diffComm, rDiff := anonCoordinator.PedersenBase.Commit(diffSecret)
 		vals[i] = anonCoordinator.PedersenBase.Add(v, diffComm)
-		Es[i] = anonCoordinator.Suite.Secret().Add(anonCoordinator.EndingEMap[k], rDiff)
+		rDiffs[i] = rDiff
 		i++
 	}
 	byteKeys := util.ProtobufEncodePointList(keys)
 	byteVals := util.ProtobufEncodePointList(vals)
-	byteEs := util.ProtobufEncodeSecretList(Es)
 	// send signal to server
 	pm := map[string]interface{} {
 		"keys" : byteKeys,
 		"vals" : byteVals,
-		"Es": byteEs,
 		"is_start" : true,
+		"GT": util.EncodePoint(anonCoordinator.PedersenBase.GT),
+		"HT": util.EncodePoint(anonCoordinator.PedersenBase.HT),
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
 	util.Send(anonCoordinator.Socket, lastServer, util.Encode(event))
 
+	// send rDiff to clients
+	pm = map[string]interface{} {
+		"keys" : byteKeys,
+		"rDiffs": util.ProtobufEncodeSecretList(rDiffs),
+	}
+	event = &proto.Event{EventType:proto.BCAST_PEDERSEN_RDIFF, Params:pm}
+	for _, addr := range anonCoordinator.Clients {
+		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
+	}
 }
 
 /**

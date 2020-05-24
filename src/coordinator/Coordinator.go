@@ -11,7 +11,6 @@ import (
 type ClientTuple struct {
 	Nym abstract.Point
 	PComm abstract.Point
-	E abstract.Secret
 }
 
 type Coordinator struct {
@@ -40,7 +39,6 @@ type Coordinator struct {
 	// store reputation map
 	BeginningKeyMap map[string]abstract.Point
 	BeginningCommMap map[string]abstract.Point
-	BeginningEMap map[string]abstract.Secret
 	// we only add new clients at the beginning of each round
 	// store the new clients's one-time pseudo nym
 	NewClientsBuffer []ClientTuple
@@ -51,7 +49,6 @@ type Coordinator struct {
 
 	EndingKeyMap map[string]abstract.Point
 	EndingCommMap map[string]abstract.Point
-	EndingEMap map[string]abstract.Secret
 	ReputationDiffMap map[string]int
 
 	AllClientsPublicKeys []abstract.Point
@@ -107,22 +104,20 @@ func (c *Coordinator) GetReputationDiff(key abstract.Point) int{
 	return c.ReputationDiffMap[key.String()]
 }
 
-func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point, E abstract.Secret) {
-	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm, E: E})
+func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point) {
+	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm})
 }
 
-func (c *Coordinator) AddIntoEndingMap(key abstract.Point, val abstract.Point, E abstract.Secret) {
+func (c *Coordinator) AddIntoEndingMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
 	c.EndingKeyMap[keyStr] = key
 	c.EndingCommMap[keyStr] = val
-	c.EndingEMap[keyStr] = E
 }
 
-func (c *Coordinator) AddIntoRepMap(key abstract.Point, val abstract.Point, E abstract.Secret) {
+func (c *Coordinator) AddIntoRepMap(key abstract.Point, val abstract.Point) {
 	keyStr := key.String()
 	c.BeginningKeyMap[keyStr] = key
 	c.BeginningCommMap[keyStr] = val
-	c.BeginningEMap[keyStr] = E
 }
 
 func (c *Coordinator) ClearVoteRecords() {

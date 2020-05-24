@@ -38,3 +38,7 @@ const GN_HONESTY_CHALLENGE = 16
 const GN_HONESTY_ANSWER = 17
 // update H for Pedersen Commitment
 const UPDATE_PEDERSEN_H = 18
+
+const BCAST_PEDERSEN_RDIFF = 19
+
+const INIT_PEDERSEN_R = 20

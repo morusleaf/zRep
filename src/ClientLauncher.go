@@ -81,7 +81,7 @@ func sendMsg(ind int, text string) {
 	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFOCommd)
 
 	// generate ARGequal
-	rd := dissentClient.Suite.Secret().Sub(dissentClient.E, rind)
+	rd := dissentClient.Suite.Secret().Sub(dissentClient.R, rind)
 	ARGequal := pedersen_fujiokam.ProveEqual(dissentClient.PedersenBase, dissentClient.FujiOkamBase, xD, PCommd, rd, FOCommd, rFOCommd)
 
 	// generate signature
@@ -124,7 +124,6 @@ func sendVote(msgID, vote int) {
 	// generate signature for msgID
 	base := lrs.CreateBase(util.PointToBigInt(dissentClient.G))
 	sig := base.Sign(util.IntToByte(msgID), len(dissentClient.AllClientsPublicKeys), dissentClient.Index, dissentClient.PrivateKey, dissentClient.AllClientsPublicKeys)
-	fmt.Println("Y0",sig.Y0)
 	byteSig := lrs.ProtobufEncodeSignature(sig)
 	// serialize Point data structure
 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
@@ -162,7 +161,6 @@ func initClient() {
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
 		Reputation: 0,
-		E: nil,
 		FujiOkamBase: nil,
 		PedersenBase: pedersen.CreateBaseFromSuite(suite),
 	}

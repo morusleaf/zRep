@@ -21,6 +21,9 @@ func Handle(buf []byte, addr *net.UDPAddr, dissentClient *DissentClient, n int) 
 	case proto.CLIENT_REGISTER_CONFIRMATION:
 		handleRegisterConfirmation(event.Params, dissentClient)
 		break
+	case proto.INIT_PEDERSEN_R:
+		handleInitPedersenR(event.Params, dissentClient)
+		break
 	case proto.GN_HONESTY_ANSWER:
 		handleGnHonestyAnswer(event.Params, dissentClient)
 		break
@@ -35,6 +38,9 @@ func Handle(buf []byte, addr *net.UDPAddr, dissentClient *DissentClient, n int) 
 		break
 	case proto.ROUND_END:
 		handleRoundEnd(event.Params, dissentClient)
+		break
+	case proto.BCAST_PEDERSEN_RDIFF:
+		handleBroadcastPedersenRDiff(event.Params, dissentClient)
 		break
 	case proto.VOTE_REPLY:
 		handleVoteReply(event.Params)
@@ -67,11 +73,11 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	dissentClient.AllGnHonestyProofPublic = util.ProtobufDecodeBigIntList(params["honesty_prf"].([]byte))
 
 	// Pedersen
-	var H = dissentClient.Suite.Point()
-	byteH := params["h"].([]byte)
-	err := H.UnmarshalBinary(byteH)
-	util.CheckErr(err)
-	dissentClient.PedersenBase.H = H
+	// var HT = dissentClient.Suite.Point()
+	// byteHT := params["h"].([]byte)
+	// err := HT.UnmarshalBinary(byteHT)
+	// util.CheckErr(err)
+	// dissentClient.PedersenBase.HT = HT
 
 	// send challenge for g1~g6
 	fmt.Println("[debug] Received configurations, start challenging...")
@@ -81,6 +87,12 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	}
 	event := &proto.Event{EventType:proto.GN_HONESTY_CHALLENGE, Params:pm}
 	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+}
+
+func handleInitPedersenR(params map[string]interface{}, dissentClient *DissentClient) {
+	dissentClient.R = util.DecodeSecret(dissentClient.Suite, params["r"].([]byte))
+	dissentClient.G = util.DecodePoint(dissentClient.Suite, params["g"].([]byte))
+	dissentClient.OnetimePseudoNym = dissentClient.Suite.Point().Mul(dissentClient.G, dissentClient.PrivateKey)
 }
 
 // check if protocol's parameters are chosen honestly
@@ -120,6 +132,18 @@ func handleRoundEnd(params map[string]interface{}, dissentClient *DissentClient)
 	fmt.Println("[client] Round ended. Waiting for new round start...");
 }
 
+func handleBroadcastPedersenRDiff(params map[string]interface{}, dissentClient *DissentClient) {
+	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
+	rDiffs := util.ProtobufDecodeSecretList(params["rDiffs"].([]byte))
+	index := util.FindIndexWithinKeyList(keyList, dissentClient.OnetimePseudoNym)
+	if index < 0 {
+		// client has not participated in this round
+		return
+	}
+	rDiff := rDiffs[index]
+	dissentClient.R.Add(dissentClient.R, rDiff)
+}
+
 // handle vote reply
 func handleVoteReply(params map[string]interface{}) {
 	status := params["reply"].(bool)
@@ -153,20 +177,24 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 	// update PComm
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
-	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
 	index := util.FindIndexWithinKeyList(keyList, nym)
 	if index < 0 {
 		panic("Can not find my nym from keyList")
 	}
 	dissentClient.Index = index
 	dissentClient.PCommr = valList[index]
-	dissentClient.E = EList[index]
 
 	// set client's parameters
 	dissentClient.Status = MESSAGE
 	dissentClient.G = g
 	dissentClient.OnetimePseudoNym = nym
 	dissentClient.AllClientsPublicKeys = keyList
+
+	// update GT & HT
+	GT := util.DecodePoint(dissentClient.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(dissentClient.Suite, params["HT"].([]byte))
+	dissentClient.PedersenBase.GT = GT
+	dissentClient.PedersenBase.HT = HT
 
 	// print out the msg to suggest user to send msg or vote
 	fmt.Println("[client] One-Time pseudonym for this round is ");

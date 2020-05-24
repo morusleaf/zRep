@@ -178,6 +178,32 @@ func DecodeARGequal(data []byte) *pedersen_fujiokam.ARGequal {
 // Encode list
 // ****************************************************************************
 
+func EncodePoint(p abstract.Point) []byte {
+	data, err := p.MarshalBinary()
+	CheckErr(err)
+	return data
+}
+
+func DecodePoint(suite abstract.Suite, data []byte) abstract.Point {
+	p := suite.Point()
+	err := p.UnmarshalBinary(data)
+	CheckErr(err)
+	return p
+}
+
+func EncodeSecret(p abstract.Secret) []byte {
+	data, err := p.MarshalBinary()
+	CheckErr(err)
+	return data
+}
+
+func DecodeSecret(suite abstract.Suite, data []byte) abstract.Secret {
+	p := suite.Secret()
+	err := p.UnmarshalBinary(data)
+	CheckErr(err)
+	return p
+}
+
 func EncodeIntArray(arr []int) []byte {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
@@ -310,7 +336,7 @@ func FindIntUsingKeyList(keyList []abstract.Point, diffList []int, nym abstract.
 			return diffList[i]
 		}
 	}
-	// if client has not joined last round, then her key will not showup in keyList
+	// if client has not joined last round, then return 0
 	return 0
 }
 

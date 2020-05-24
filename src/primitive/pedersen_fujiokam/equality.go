@@ -7,6 +7,7 @@ import (
 	"github.com/dedis/crypto/abstract"
 	"github.com/dedis/crypto/random"
 	"github.com/dedis/crypto/nist"
+	// "fmt"
 )
 
 type ARGequal struct {
@@ -40,7 +41,7 @@ func ProveEqual(pedersenBase *pedersen.PedersenBase, fujiokamBase *fujiokam.Fuji
 	t2Raw := SecretToBigInt(t2)
 	t3 := suite.Secret().Pick(random.Stream)
 	t3Raw := SecretToBigInt(t3)
-	// T1 := g^t1 * h^t2 (mod p)
+	// T1 := GT^t1 * HT^t2 (mod p)
 	T1 := pedersenBase.CommitWithR(t1, t2)
 	byteT1, _ := T1.MarshalBinary()
 
@@ -84,7 +85,7 @@ func VerifyEqual(pedersenBase *pedersen.PedersenBase, fujiokamBase *fujiokam.Fuj
 	negC := pedersenBase.Suite.Secret().Neg(c)
 	negCRaw := new(big.Int).Neg(arg.C)
 
-	// T1 := g^s1 * h^s2 * PComm^(-c) mod p
+	// T1 := GT^s1 * HT^s2 * PComm^(-c) mod p
 	T1 := pedersenBase.CommitWithR(s1, s2)
 	tmp := pedersenBase.Suite.Point().Mul(PComm, negC)
 	T1.Add(T1, tmp)
