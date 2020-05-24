@@ -36,8 +36,11 @@ func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 	case proto.SERVER_REGISTER:
 		handleServerRegister()
 		break
+	case proto.UPDATE_PEDERSEN_H:
+		handleUpdatePedersenH(event.Params)
+		break
 	case proto.CLIENT_REGISTER_CONTROLLERSIDE:
-		handleClientRegisterControllerSide(event.Params,);
+		handleClientRegisterControllerSide(event.Params);
 		break
 	case proto.CLIENT_REGISTER_SERVERSIDE:
 		handleClientRegisterServerSide(event.Params);
@@ -115,10 +118,9 @@ func handleAnnouncement(params map[string]interface{}) {
 // handle server register request
 func handleServerRegister() {
 	fmt.Println("[debug] Receive the registration info from server " + srcAddr.String());
-	// send reply to the new server
 	lastServer := anonCoordinator.GetLastServer()
 
-	// update next hop for previous server
+	// link new server to the next_hop of last server
 	if lastServer != nil {
 		pm2 := map[string]interface{}{
 			"reply": true,
@@ -131,14 +133,23 @@ func handleServerRegister() {
 	if lastServer == nil {
 		lastServer = anonCoordinator.LocalAddr
 	}
+	byteH, err := anonCoordinator.PedersenBase.H.MarshalBinary()
+	util.CheckErr(err)
+	// tell new server its prev_server is last server
 	pm1 := map[string]interface{}{
 		"reply": true,
 		"prev_server": lastServer.String(),
+		"h": byteH,
 	}
 	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
 	util.Send(anonCoordinator.Socket, srcAddr, util.Encode(event1))
 
 	anonCoordinator.AddServer(srcAddr);
+}
+
+func handleUpdatePedersenH(params map[string]interface{}) {
+	err := anonCoordinator.PedersenBase.H.UnmarshalBinary(params["h"].([]byte))
+	util.CheckErr(err)
 }
 
 // Handler for REGISTER event

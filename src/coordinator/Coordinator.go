@@ -33,6 +33,7 @@ type Coordinator struct {
 	PublicKey abstract.Point
 	// generator g
 	G abstract.Point
+	// h for Pedersen
 
 	// store client address
 	Clients map[string]*net.UDPAddr

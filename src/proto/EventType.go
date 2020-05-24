@@ -36,3 +36,5 @@ const BCAST_PEDERSEN_H = 15
 const GN_HONESTY_CHALLENGE = 16
 // answer for honesty challenge
 const GN_HONESTY_ANSWER = 17
+// update H for Pedersen Commitment
+const UPDATE_PEDERSEN_H = 18

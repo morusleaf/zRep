@@ -58,7 +58,7 @@ func initAnonServer() {
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	RoundKey := suite.Secret().Pick(random.Stream)
-	pedersenBase := pedersen.CreateBaseFromSuite(suite)
+	pedersenBase := pedersen.CreateMinimalBaseFromSuite(suite)
 
 	anonServer = &server.AnonServer{
 		CoordinatorAddr: ServerAddr,

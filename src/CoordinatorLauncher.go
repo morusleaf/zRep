@@ -45,7 +45,7 @@ func initCoordinator() {
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
-	pedersenBase := pedersen.CreateBaseFromSuite(suite)
+	pedersenBase := pedersen.CreateMinimalBaseFromSuite(suite)
 	fujiokamBase := fujiokam.CreateBaseFromSuite(suite)
 	prfSecret, prfPublic := fujiokamBase.GenerateAllGnHonestyProof()
 
@@ -78,8 +78,7 @@ func initCoordinator() {
 // config parameters for commitments
 func configCommParams() {
 	// Config Pedersen Commitment
-	base := anonCoordinator.PedersenBase
-	h := base.H // TODO: generate this from all servers
+	h := anonCoordinator.PedersenBase.H
 	byteH, err := h.MarshalBinary()
 	util.CheckErr(err)
 	// broadcast hm

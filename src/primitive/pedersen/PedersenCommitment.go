@@ -15,6 +15,17 @@ func CreateBase() *PedersenBase {
 	return CreateBaseFromSuite(suite)
 }
 
+// initialize h with g
+func CreateMinimalBaseFromSuite(suite abstract.Suite) *PedersenBase {
+	h := suite.Point().Mul(nil, suite.Secret().One())
+	base := &PedersenBase {
+		Suite: suite,
+		H: h,
+	}
+	return base
+}
+
+// initialize h with g^s, where s is a random number
 func CreateBaseFromSuite(suite abstract.Suite) *PedersenBase {
 	s := suite.Secret().Pick(random.Stream)
 	h := suite.Point().Mul(nil, s)
