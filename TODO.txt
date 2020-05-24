@@ -1,3 +1,2 @@
 Generate random p and q for Fujisaki-Okamoto commitment.
-Use better signature for messge posting and voting phases.
 Adapt Ning's modified protocol.

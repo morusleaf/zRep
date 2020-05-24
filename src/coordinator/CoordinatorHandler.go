@@ -14,6 +14,7 @@ import (
 	"time"
 	"github.com/dedis/crypto/abstract"
 	"../primitive/pedersen_fujiokam"
+	"../primitive/lrs"
 	"math/big"
 )
 
@@ -77,6 +78,7 @@ func handleAnnouncement(params map[string]interface{}) {
 	byteG := params["g"].([]byte)
 	err := g.UnmarshalBinary(byteG)
 	util.CheckErr(err)
+	anonCoordinator.LRSBase = lrs.CreateBase(util.PointToBigInt(g))
 
 	//construct Decrypted reputation map
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
@@ -86,9 +88,10 @@ func handleAnnouncement(params map[string]interface{}) {
 	anonCoordinator.EndingKeyMap = make(map[string]abstract.Point)
 	anonCoordinator.EndingEMap = make(map[string]abstract.Secret)
 	anonCoordinator.ReputationDiffMap = make(map[string]int)
+	anonCoordinator.AllClientsPublicKeys = keyList
 
 	for i := 0; i < len(keyList); i++ {
-		anonCoordinator.AddIntoDecryptedMap(keyList[i], valList[i], EList[i])
+		anonCoordinator.AddIntoEndingMap(keyList[i], valList[i], EList[i])
 	}
 
 	// distribute g and table to user
@@ -214,7 +217,7 @@ func handleGnHonestyChallenge(params map[string]interface{}, addr *net.UDPAddr) 
 	fmt.Println("[debug] Received challenge, start answering...")
 	base := anonCoordinator.FujiOkamBase
 	answer := base.AnswerAllGnHonesty(challenge, anonCoordinator.AllGnHonestyProofSecret, anonCoordinator.AllGnHonestyProofPublic)
-	
+
 	pm := map[string]interface{}{
 		"honesty_ans": util.ProtobufEncodeBigIntList(answer),
 	}
@@ -314,27 +317,39 @@ func handleVote(params map[string]interface{}) {
 	byteNym := params["nym"].([]byte)
 	err := nym.UnmarshalBinary(byteNym)
 	util.CheckErr(err)
+	// get msg id and vote
+	commands := strings.Split(text,";")
+	// modify the reputation
+	msgID, _ := strconv.Atoi(commands[0])
+	vote, _ := strconv.Atoi(commands[1])
 
 	fmt.Println("[debug] Receiving vote from " + srcAddr.String() + ": " + text)
-	// verify the identification of the client
 
-	byteText := []byte(text)
-	err = util.ElGamalVerify(anonCoordinator.Suite,byteText,nym,byteSig, anonCoordinator.G)
+	// verify the identification of the client
+	index := util.FindIndexWithinKeyList(anonCoordinator.AllClientsPublicKeys, nym)
+	if index < 0 {
+		fmt.Println("[note] Can not find nym within keyList")
+		return
+	}
+	sig := lrs.ProtobufDecodeSignature(byteSig)
+	fmt.Println("sig.Y0", sig.Y0)
+	res := anonCoordinator.LRSBase.Verify(util.IntToByte(msgID), len(anonCoordinator.AllClientsPublicKeys), index, sig, anonCoordinator.AllClientsPublicKeys)
 	var pm map[string]interface{}
-	if err != nil {
-		fmt.Print("[note]** Fails to verify the vote...")
+	if res == false {
+		fmt.Println("[coordinator]** Fails to verify signature...")
+		pm = map[string]interface{}{
+			"reply" : false,
+		}
+	}else if anonCoordinator.IsLinkableRecord(sig.Y0) {
+		fmt.Println("[coordinator]** Signature implies duplicate vote...")
 		pm = map[string]interface{}{
 			"reply" : false,
 		}
 	}else {
-		// avoid duplicate vote
-		// todo
+		fmt.Println("[debug] Linkable ring signature verification passed")
+		// record vote
+		anonCoordinator.AddToVoteRecords(sig.Y0)
 
-		// get msg id and vote
-		commands := strings.Split(text,";")
-		// modify the reputation
-		msgID, _ := strconv.Atoi(commands[0])
-		vote, _ := strconv.Atoi(commands[1])
 		targetNym := anonCoordinator.MsgLog[msgID-1]
 
 		anonCoordinator.ReputationDiffMap[targetNym.String()] += vote

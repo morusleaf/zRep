@@ -1,0 +1,220 @@
+package lrs
+
+import (
+	"github.com/dedis/crypto/abstract"
+	"github.com/dedis/crypto/random"
+	"github.com/dedis/crypto/nist"
+	"math/big"
+	"bytes"
+	"../../util"
+)
+
+type LRSBase struct {
+	Suite abstract.Suite
+	P *big.Int
+	Q *big.Int // Q = P - 1
+	G *big.Int
+}
+
+func CreateBase(g *big.Int) *LRSBase {
+	suite := nist.NewAES128SHA256QR512()
+	p, _ := new(big.Int).SetString("10198267722357351868598076141027380280417188309231803909918464305012113541414604537422741096561285049775792035177041672305646773132014126091142862443826263", 10)
+	q := new(big.Int).Sub(p, bigOne)
+	base := &LRSBase{
+		Suite: suite,
+		P: p,
+		Q: q,
+		G: g,
+	}
+	return base
+}
+
+var bigZero = big.NewInt(0)
+var bigOne = big.NewInt(1)
+var bigTwo = big.NewInt(2)
+var bigFour = big.NewInt(4)
+var bigNegOne = big.NewInt(-1)
+
+// H1(x) = H(x) mod (p-1)
+func (base *LRSBase) H1(msg []byte) *big.Int {
+	H := base.Suite.Hash()
+	H.Write(msg)
+	res := new(big.Int).SetBytes(H.Sum(nil))
+	res.Mod(res, base.Q)
+	return res
+}
+
+// H2(x) = H(x)^2 mod p
+func (base *LRSBase) H2(msg []byte) *big.Int {
+	H := base.Suite.Hash()
+	H.Write(msg)
+	res := new(big.Int).SetBytes(H.Sum(nil))
+	res.Exp(res, bigTwo, base.P)
+	return res
+}
+
+// zi' := g^si * yi^ci (mod p)
+func (base *LRSBase) zi1 (si, yi, ci *big.Int) *big.Int {
+	a := new(big.Int).Exp(base.G, si, base.P)
+	b := new(big.Int).Exp(yi, ci, base.P)
+	return a.Mul(a, b).Mod(a, base.P)
+}
+
+// zi'' := h^si * y0^ci (mod p)
+func (base *LRSBase) zi2 (h, si, y0, ci *big.Int) *big.Int {
+	a := new(big.Int).Exp(h, si, base.P)
+	b := new(big.Int).Exp(y0, ci, base.P)
+	return a.Mul(a, b).Mod(a, base.P)
+}
+
+// randomly pick an integer from Z_q
+func (base *LRSBase) pickZq() *big.Int {
+	return random.Int(base.Q, random.Stream)
+}
+
+type Signature struct {
+	Y0 *big.Int
+	S []*big.Int
+	C []*big.Int
+}
+
+// L := y1 || ... || yn
+func computeL(y []*big.Int) []byte {
+	buf := new(bytes.Buffer)
+	for _, yi := range y {
+		buf.Write(yi.Bytes())
+	}
+	return buf.Bytes()
+}
+
+// h := H2(H(m) || L)
+func (base *LRSBase) computeh(m []byte, L []byte) *big.Int {
+	H := base.Suite.Hash()
+	H.Write(m)
+	buf := new(bytes.Buffer)
+	buf.Reset()
+	buf.Write(H.Sum(nil))
+	buf.Write(L)
+	return base.H2(buf.Bytes())
+}
+
+func (base *LRSBase) Sign(m []byte, n int, pi int, xpi abstract.Secret, y []abstract.Point) *Signature {
+	xpiRaw := util.SecretToBigInt(xpi)
+	yRaw := make([]*big.Int, len(y))
+	for i, yi := range y {
+		yRaw[i] = util.PointToBigInt(yi)
+	}
+	return base.SignHelper(m, n, pi, xpiRaw, yRaw)
+}
+
+func (base *LRSBase) SignHelper(m []byte, n int, pi int, xpi *big.Int, y []*big.Int) *Signature {
+	L := computeL(y)
+
+	// h := H2(H(m) || L)
+	h := base.computeh(m, L)
+	// y0 := h^x{pi} (mod p)
+	y0 := new(big.Int).Exp(h, xpi, base.P)
+
+	// Rside := H1(L || y0 || m || z1' || ... || zn' || z1'' || ... || zn'')
+	s := make([]*big.Int, n)
+	for i := range s {
+		if i == pi {
+			continue
+		}
+		s[i] = base.pickZq()
+	}
+	c := make([]*big.Int, n)
+	for i := range c {
+		if i == pi {
+			continue
+		}
+		c[i] = base.pickZq()
+	}
+	buf := new(bytes.Buffer)
+	buf.Write(L)
+	buf.Write(y0.Bytes())
+	buf.Write(m)
+	r := base.pickZq()
+	// zpi' := g^r (mod p)
+	zpi1 := new(big.Int).Exp(base.G, r, base.P)
+	// zpi'' := h^r (mod p)
+	zpi2 := new(big.Int).Exp(h, r, base.P)
+	for i := range s {
+		if i == pi {
+			buf.Write(zpi1.Bytes())
+		}else {
+			zi1 := base.zi1(s[i], y[i], c[i])
+			buf.Write(zi1.Bytes())
+		}
+	}
+	for i := range s {
+		if i == pi {
+			buf.Write(zpi2.Bytes())
+		} else {
+			zi2 := base.zi2(h, s[i], y0, c[i])
+			buf.Write(zi2.Bytes())
+		}
+	}
+	Rside := base.H1(buf.Bytes())
+
+	// c1 + ... + cn == Rside (mod q)
+	for i, ci := range c {
+		if i == pi {
+			continue
+		}
+		Rside.Sub(Rside, ci).Mod(Rside, base.Q)
+	}
+	c[pi] = Rside
+
+	// s{pi} := r - c{pi} * x{pi} (mod q)
+	spi := new(big.Int).Mul(c[pi], xpi)
+	spi.Sub(r, spi).Mod(spi, base.Q)
+	s[pi] = spi
+
+	return &Signature {
+		Y0: y0,
+		S: s,
+		C: c,
+	}
+}
+
+func (base *LRSBase) Verify(m []byte, n int, pi int, sig *Signature, y []abstract.Point) bool {
+	yRaw := make([]*big.Int, len(y))
+	for i, yi := range y {
+		yRaw[i] = util.PointToBigInt(yi)
+	}
+	return base.VerifyHelper(m, n, pi, sig, yRaw)
+}
+
+func (base *LRSBase) VerifyHelper(m []byte, n int, pi int, sig *Signature, y []*big.Int) bool {
+	L := computeL(y)
+	h := base.computeh(m, L)
+
+	// Rside := H1(L || y0 || m || z1' || ... zn' || z1'' || zn'')
+	buf := new(bytes.Buffer)
+	buf.Write(L)
+	buf.Write(sig.Y0.Bytes())
+	buf.Write(m)
+	for i := 0; i < n; i++ {
+		zi1 := base.zi1(sig.S[i], y[i], sig.C[i])
+		buf.Write(zi1.Bytes())
+	}
+	for i := 0; i < n; i++ {
+		zi2 := base.zi2(h, sig.S[i], sig.Y0, sig.C[i])
+		buf.Write(zi2.Bytes())
+	}
+	Rside := base.H1(buf.Bytes())
+
+	// Lside := c1 + ... + cn (mod q)
+	Lside := new(big.Int).Set(bigZero)
+	for _, ci := range sig.C {
+		Lside.Add(Lside, ci).Mod(Lside, base.Q)
+	}
+
+	return Lside.Cmp(Rside) == 0
+}
+
+// return true when they are generated by the same signer
+func Linkable(sig1, sig2 *Signature) bool {
+	return sig1.Y0.Cmp(sig2.Y0) == 0
+}

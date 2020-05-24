@@ -4,6 +4,7 @@ import (
 	"net"
 	"../primitive/pedersen"
 	"../primitive/fujiokam"
+	"../primitive/lrs"
 	"math/big"
 )
 
@@ -44,14 +45,19 @@ type Coordinator struct {
 	NewClientsBuffer []ClientTuple
 	// msg sender's record nym
 	MsgLog []abstract.Point
+	// record each vote signature's y0
+	VoteRecords []*big.Int
 
 	EndingKeyMap map[string]abstract.Point
 	EndingCommMap map[string]abstract.Point
 	EndingEMap map[string]abstract.Secret
 	ReputationDiffMap map[string]int
 
+	AllClientsPublicKeys []abstract.Point
+
 	PedersenBase *pedersen.PedersenBase
 	FujiOkamBase *fujiokam.FujiOkamBase
+	LRSBase *lrs.LRSBase
 
 	AllGnHonestyProofSecret []*big.Int
 	AllGnHonestyProofPublic []*big.Int
@@ -104,7 +110,7 @@ func (c *Coordinator) AddClientInBuffer(nym abstract.Point, PComm abstract.Point
 	c.NewClientsBuffer = append(c.NewClientsBuffer, ClientTuple{Nym:nym, PComm:PComm, E: E})
 }
 
-func (c *Coordinator) AddIntoDecryptedMap(key abstract.Point, val abstract.Point, E abstract.Secret) {
+func (c *Coordinator) AddIntoEndingMap(key abstract.Point, val abstract.Point, E abstract.Secret) {
 	keyStr := key.String()
 	c.EndingKeyMap[keyStr] = key
 	c.EndingCommMap[keyStr] = val
@@ -118,3 +124,19 @@ func (c *Coordinator) AddIntoRepMap(key abstract.Point, val abstract.Point, E ab
 	c.BeginningEMap[keyStr] = E
 }
 
+func (c *Coordinator) ClearVoteRecords() {
+	c.VoteRecords = []*big.Int{}
+}
+
+func (c *Coordinator) IsLinkableRecord(y0 *big.Int) bool {
+	for _, r := range c.VoteRecords {
+		if r.Cmp(y0) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Coordinator) AddToVoteRecords(y0 *big.Int) {
+	c.VoteRecords = append(c.VoteRecords, y0)
+}

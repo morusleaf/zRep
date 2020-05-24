@@ -17,6 +17,7 @@ import (
 	"math/big"
 	"./primitive/pedersen"
 	"./primitive/pedersen_fujiokam"
+	"./primitive/lrs"
 )
 
 // pointer to client itself
@@ -120,16 +121,18 @@ func sendVote(msgID, vote int) {
 	m := strconv.Itoa(msgID)
 	text :=  m + ";" + v
 
-	// generate signature
-	rand := dissentClient.Suite.Cipher([]byte("example"))
-	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
+	// generate signature for msgID
+	base := lrs.CreateBase(util.PointToBigInt(dissentClient.G))
+	sig := base.Sign(util.IntToByte(msgID), len(dissentClient.AllClientsPublicKeys), dissentClient.Index, dissentClient.PrivateKey, dissentClient.AllClientsPublicKeys)
+	fmt.Println("Y0",sig.Y0)
+	byteSig := lrs.ProtobufEncodeSignature(sig)
 	// serialize Point data structure
 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
 	// wrap params
 	params := map[string]interface{}{
 		"text": text,
 		"nym":byteNym,
-		"signature":sig,
+		"signature":byteSig,
 	}
 	event := &proto.Event{EventType:proto.VOTE, Params:params}
 	// send to coordinator

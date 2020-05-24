@@ -151,7 +151,7 @@ func roundEnd() {
 	}
 	// add new clients into reputation map
 	for _,cdata := range anonCoordinator.NewClientsBuffer {
-		anonCoordinator.AddIntoDecryptedMap(cdata.Nym, cdata.PComm, cdata.E)
+		anonCoordinator.AddIntoEndingMap(cdata.Nym, cdata.PComm, cdata.E)
 	}
 	// add previous clients into reputation map
 	// construct the parameters
@@ -191,6 +191,7 @@ func roundEnd() {
  * just send it from controller
  */
 func vote() {
+	anonCoordinator.ClearVoteRecords()
 	pm := map[string]interface{} {}
 	event := &proto.Event{EventType:proto.VOTE, Params:pm}
 	for _, addr :=  range anonCoordinator.Clients {

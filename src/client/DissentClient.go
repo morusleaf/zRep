@@ -22,6 +22,8 @@ type DissentClient struct {
 	OnetimePseudoNym abstract.Point
 	G abstract.Point
 	Reputation int
+	AllClientsPublicKeys []abstract.Point
+	Index int
 
 	PCommr abstract.Point
 	E abstract.Secret

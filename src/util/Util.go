@@ -257,6 +257,33 @@ func IntToByte(n int) []byte {
 	return buf
 }
 
+// transform abstract.Secret (implemented by nist.Int) to *big.Int
+func SecretToBigInt(s abstract.Secret) *big.Int {
+	return &s.(*nist.Int).V
+}
+
+// transform *big.Int to abstract.Secret (implemented by nist.Int)
+func BigIntToSecret(suite abstract.Suite, i *big.Int) abstract.Secret {
+	s := suite.Secret()
+	nistS := s.(*nist.Int)
+	nistS.V.Mod(i, nistS.M)
+	return s
+}
+
+// transform abstract.Point (implemented by nist.residuePoint) to *big.Int
+func PointToBigInt(p abstract.Point) *big.Int {
+	bytes, err := p.MarshalBinary()
+	CheckErr(err)
+	return new(big.Int).SetBytes(bytes)
+}
+
+// transform *big.Int to abstract.Point (implemented by nist.residuePoint)
+func BigIntToPoint(suite abstract.Suite, i *big.Int) abstract.Point {
+	p := suite.Point()
+	p.UnmarshalBinary(i.Bytes())
+	return p
+}
+
 func FindCommUsingKeyList(keyList, valList []abstract.Point, EList []abstract.Secret, nym abstract.Point) (abstract.Point, abstract.Secret) {
 	for i, k := range keyList {
 		if nym.Equal(k) {
@@ -264,6 +291,17 @@ func FindCommUsingKeyList(keyList, valList []abstract.Point, EList []abstract.Se
 		}
 	}
 	return nil, nil
+}
+
+// return i where keyList[i] == nym
+// if can not find, return -1
+func FindIndexWithinKeyList(keyList []abstract.Point, nym abstract.Point) int {
+	for i, k := range keyList {
+		if nym.Equal(k) {
+			return i
+		}
+	}
+	return -1
 }
 
 func FindIntUsingKeyList(keyList []abstract.Point, diffList []int, nym abstract.Point) int {

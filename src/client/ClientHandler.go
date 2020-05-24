@@ -148,21 +148,25 @@ func handleAnnouncement(params map[string]interface{}, dissentClient *DissentCli
 	g := dissentClient.Suite.Point()
 	// deserialize g and calculate nym
 	g.UnmarshalBinary(params["g"].([]byte))
-	nym := dissentClient.Suite.Point().Mul(g,dissentClient.PrivateKey)
+	nym := dissentClient.Suite.Point().Mul(g, dissentClient.PrivateKey)
 
 	// update PComm
 	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
 	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
 	EList := util.ProtobufDecodeSecretList(params["Es"].([]byte))
-	dissentClient.PCommr, dissentClient.E = util.FindCommUsingKeyList(keyList, valList, EList, nym)
-	if dissentClient.PCommr == nil {
-		panic(1)
+	index := util.FindIndexWithinKeyList(keyList, nym)
+	if index < 0 {
+		panic("Can not find my nym from keyList")
 	}
+	dissentClient.Index = index
+	dissentClient.PCommr = valList[index]
+	dissentClient.E = EList[index]
 
 	// set client's parameters
 	dissentClient.Status = MESSAGE
 	dissentClient.G = g
 	dissentClient.OnetimePseudoNym = nym
+	dissentClient.AllClientsPublicKeys = keyList
 
 	// print out the msg to suggest user to send msg or vote
 	fmt.Println("[client] One-Time pseudonym for this round is ");
