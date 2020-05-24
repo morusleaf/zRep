@@ -19,7 +19,6 @@ import (
 )
 
 var anonCoordinator *Coordinator
-var srcAddr *net.UDPAddr
 
 
 // Handle Use tmpCoordinator to handle data sent from addr.
@@ -27,14 +26,13 @@ var srcAddr *net.UDPAddr
 func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 	// decode the whole message
 	anonCoordinator = tmpCoordinator
-	srcAddr = addr
 
 	event := &proto.Event{}
 	err := gob.NewDecoder(bytes.NewReader(buf[:n])).Decode(event)
 	util.CheckErr(err)
 	switch event.EventType {
 	case proto.SERVER_REGISTER:
-		handleServerRegister()
+		handleServerRegister(addr)
 		break
 	case proto.UPDATE_PEDERSEN_H:
 		handleUpdatePedersenH(event.Params)
@@ -49,10 +47,10 @@ func Handle(buf []byte, addr *net.UDPAddr, tmpCoordinator *Coordinator, n int) {
 		handleGnHonestyChallenge(event.Params, addr)
 		break
 	case proto.MESSAGE:
-		handleMsg(event.Params)
+		handleMsg(event.Params, addr)
 		break
 	case proto.VOTE:
-		handleVote(event.Params)
+		handleVote(event.Params, addr)
 		break
 	case proto.ROUND_END:
 		handleRoundEnd(event.Params)
@@ -117,15 +115,15 @@ func handleAnnouncement(params map[string]interface{}) {
 }
 
 // handle server register request
-func handleServerRegister() {
-	fmt.Println("[debug] Receive the registration info from server " + srcAddr.String());
+func handleServerRegister(addr *net.UDPAddr) {
+	fmt.Println("[debug] Receive the registration info from server " + addr.String());
 	lastServer := anonCoordinator.GetLastServer()
 
 	// link new server to the next_hop of last server
 	if lastServer != nil {
 		pm2 := map[string]interface{}{
 			"reply": true,
-			"next_hop": srcAddr.String(),
+			"next_hop": addr.String(),
 		}
 		event2 := &proto.Event{EventType:proto.UPDATE_NEXT_HOP, Params:pm2}
 		util.Send(anonCoordinator.Socket, lastServer, util.Encode(event2))
@@ -143,9 +141,9 @@ func handleServerRegister() {
 		"h": byteH,
 	}
 	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
-	util.Send(anonCoordinator.Socket, srcAddr, util.Encode(event1))
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event1))
 
-	anonCoordinator.AddServer(srcAddr);
+	anonCoordinator.AddServer(addr);
 }
 
 func handleUpdatePedersenH(params map[string]interface{}) {
@@ -159,7 +157,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}, addr *net
 	// get client's public key
 	publicKey := anonCoordinator.Suite.Point()
 	publicKey.UnmarshalBinary(params["public_key"].([]byte))
-	anonCoordinator.AddClient(publicKey,srcAddr)
+	anonCoordinator.AddClient(publicKey, addr)
 
 	// compute Pedersen commitment
 	xInit := anonCoordinator.Suite.Secret().SetInt64(0)
@@ -171,7 +169,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}, addr *net
 	firstServer := anonCoordinator.GetFirstServer()
 	pm := map[string]interface{}{
 		"public_key": params["public_key"],
-		"addr": srcAddr.String(),
+		"addr": addr.String(),
 		"pcomm": util.EncodePoint(PComm),
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
@@ -240,7 +238,7 @@ func handleGnHonestyChallenge(params map[string]interface{}, addr *net.UDPAddr) 
 }
 
 // verify the msg and broadcast to clients
-func handleMsg(params map[string]interface{}) {
+func handleMsg(params map[string]interface{}, addr *net.UDPAddr) {
 	// get info from the request
 	text := params["text"].(string)
 	byteSig := params["signature"].([]byte)
@@ -249,7 +247,7 @@ func handleMsg(params map[string]interface{}) {
 	err := nym.UnmarshalBinary(byteNym)
 	util.CheckErr(err)
 
-	fmt.Println("[debug] Receiving msg from " + srcAddr.String() + ": " + text)
+	fmt.Println("[debug] Receiving msg from " + addr.String() + ": " + text)
 
 	// verify the identification of the client
 	byteText := []byte(text)
@@ -319,11 +317,11 @@ func handleMsg(params map[string]interface{}) {
 		"reply" : true,
 	}
 	event1 := &proto.Event{EventType:proto.MSG_REPLY, Params:pmMsg}
-	util.Send(anonCoordinator.Socket, srcAddr, util.Encode(event1))
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event1))
 }
 
 // verify the vote and reply to client
-func handleVote(params map[string]interface{}) {
+func handleVote(params map[string]interface{}, addr *net.UDPAddr) {
 	// get info from the request
 	text := params["text"].(string)
 	byteSig := params["signature"].([]byte)
@@ -337,7 +335,7 @@ func handleVote(params map[string]interface{}) {
 	msgID, _ := strconv.Atoi(commands[0])
 	vote, _ := strconv.Atoi(commands[1])
 
-	fmt.Println("[debug] Receiving vote from " + srcAddr.String() + ": " + text)
+	fmt.Println("[debug] Receiving vote from " + addr.String() + ": " + text)
 
 	// verify the identification of the client
 	index := util.FindIndexWithinKeyList(anonCoordinator.AllClientsPublicKeys, nym)
@@ -374,7 +372,7 @@ func handleVote(params map[string]interface{}) {
 
 	event := &proto.Event{EventType:proto.VOTE_REPLY, Params:pm}
 	// send reply to the client
-	util.Send(anonCoordinator.Socket,srcAddr,util.Encode(event))
+	util.Send(anonCoordinator.Socket, addr, util.Encode(event))
 }
 
 // Handler for ROUND_END event

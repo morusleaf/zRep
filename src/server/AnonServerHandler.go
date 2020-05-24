@@ -13,7 +13,6 @@ import (
 	// "github.com/dedis/crypto/anon"
 )
 
-var srcAddr *net.UDPAddr
 var anonServer *AnonServer
 
 func Handle(buf []byte, addr *net.UDPAddr, tmpServer *AnonServer, n int) {
@@ -21,7 +20,6 @@ func Handle(buf []byte, addr *net.UDPAddr, tmpServer *AnonServer, n int) {
 	byteArr := make([]util.ByteArray,2)
 	gob.Register(byteArr)
 
-	srcAddr = addr
 	anonServer = tmpServer
 	event := &proto.Event{}
 	err := gob.NewDecoder(bytes.NewReader(buf[:n])).Decode(event)
