@@ -237,6 +237,12 @@ func handleAnnouncement(params map[string]interface{}) {
 	GT := util.DecodePoint(anonServer.Suite, params["GT"].([]byte))
 	HT := util.DecodePoint(anonServer.Suite, params["HT"].([]byte))
 
+	// randomly pick Ei
+	E := anonServer.Suite.Secret().Pick(random.Stream)
+	// update GT & HT
+	GT.Mul(GT, E)
+	HT.Mul(HT, E)
+
 	if val, ok := params["g"]; ok {
 		// contains g
 		byteG := val.([]byte)
@@ -248,12 +254,6 @@ func handleAnnouncement(params map[string]interface{}) {
 	}else {
 		g = anonServer.Suite.Point().Mul(nil, anonServer.Roundkey)
 	}
-
-	// randomly pick Ei
-	E := anonServer.Suite.Secret().Pick(random.Stream)
-	// update GT & HT
-	GT.Mul(GT, E)
-	HT.Mul(HT, E)
 
 	// update table
 	newKeys := make([]abstract.Point, size)

@@ -42,7 +42,7 @@ func register() {
   */
 func startClientListener() {
 	fmt.Println("[debug] Client Listener started...");
-	buf := make([]byte, 16384)
+	buf := make([]byte, 100000)
 	for {
 		n,addr,err := dissentClient.Socket.ReadFromUDP(buf)
 		if err != nil {

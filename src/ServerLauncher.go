@@ -34,7 +34,7 @@ func serverRegister() {
  */
 func startAnonServerListener() {
 	fmt.Println("[debug] AnonServer Listener started...");
-	buf := make([]byte, 16384)
+	buf := make([]byte, 100000)
 	for {
 		n,addr,err := anonServer.Socket.ReadFromUDP(buf)
 		if err != nil {
@@ -85,7 +85,7 @@ func launchServer() {
 	// check available port
 	localPort, err := strconv.Atoi(config["local_port"])
 	util.CheckErr(err)
-	for i := localPort; i <= localPort+3; i++ {
+	for i := localPort; i <= localPort+10; i++ {
 		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: i})
 		if err == nil {
 			// set socket

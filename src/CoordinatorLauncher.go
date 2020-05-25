@@ -26,7 +26,7 @@ var anonCoordinator *coordinator.Coordinator
   */
 func startServerListener() {
 	fmt.Println("[debug] Coordinator server listener started...");
-	buf := make([]byte, 16384)
+	buf := make([]byte, 100000)
 	for {
 		n,addr,err := anonCoordinator.Socket.ReadFromUDP(buf)
 		util.CheckErr(err)

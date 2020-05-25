@@ -6,7 +6,7 @@ import (
 	"errors"
 	"github.com/dedis/crypto/abstract"
 	"encoding/binary"
-	// "os"
+	"os"
 	"net"
 	"encoding/gob"
 	"reflect"
@@ -17,6 +17,7 @@ import (
 	"../primitive/fujiokam"
 	"../primitive/pedersen_fujiokam"
 	"math/big"
+	"fmt"
 )
 
 func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
@@ -36,6 +37,7 @@ func Encode(event interface{}) []byte {
 }
 
 func Send(conn *net.UDPConn, addr *net.UDPAddr,content []byte) {
+	fmt.Fprintln(os.Stderr, "send size=", len(content))
 	_,err := conn.WriteToUDP(content, addr)
 	if err != nil {
 		panic(err.Error())
