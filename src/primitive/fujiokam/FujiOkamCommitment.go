@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math"
 	"crypto/sha256"
+	"os/exec"
 )
 
 type FujiOkamBase struct {
@@ -126,11 +127,26 @@ func CreateBase() (*FujiOkamBase) {
 	return CreateBaseFromSuite(suite)
 }
 
+func genSafePrime512() *big.Int {
+	output, err := exec.Command("openssl", "prime", "-safe", "-generate", "-bits", "512").Output()
+	if err != nil {
+		panic(err.Error())
+	}
+	st := string(output)
+	n, succ := new(big.Int).SetString(st[:len(st)-1], 10)
+	if succ != true {
+		panic("failed to convert safe prime")
+	}
+	return n
+}
+
 func CreateBaseFromSuite(suite abstract.Suite) (*FujiOkamBase) {
-	p := new(big.Int).SetInt64(3)
-	q := new(big.Int).SetInt64(5)
+	dpa1 := genSafePrime512()
+	dqa1 := genSafePrime512()
+	p := new(big.Int).Div(dpa1, bigTwo)
+	q := new(big.Int).Div(dqa1, bigTwo)
 	// n := (2p + 1) * (2q + 1)
-	n := new(big.Int).SetInt64(77)
+	n := new(big.Int).Mul(dpa1, dqa1)
 	base := CreateMinimumBase(suite, n)
 	base.P = p
 	base.Q = q

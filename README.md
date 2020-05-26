@@ -4,6 +4,8 @@ zRep is a tool which makes user actions anonymous at anytime and anywhere in ser
 
 ## How to compile
 
+The following assumes you are using Linux.
+
 1.  Run `git clone git@github.com:morusleaf/zRep.git` to download source code and binary file on github. 
 
 2.  Install go language (version >= 1.11).
@@ -13,6 +15,8 @@ zRep is a tool which makes user actions anonymous at anytime and anywhere in ser
 4.  Run `go get github.com/dedis/crypto@38ce20af` to install dependent cryptography library.
 
     Run `go get github.com/dedis/protobuf` to install message encoding library.
+
+5.  Make sure `openssl` has been installed and can be found from `$PATH`. zRep needs it to generate random safe primes.
 
 ## How to configure and run
 
