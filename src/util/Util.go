@@ -6,7 +6,7 @@ import (
 	"errors"
 	"github.com/dedis/crypto/abstract"
 	"encoding/binary"
-	"os"
+	// "os"
 	"net"
 	"encoding/gob"
 	"reflect"
@@ -17,7 +17,8 @@ import (
 	"../primitive/fujiokam"
 	"../primitive/pedersen_fujiokam"
 	"math/big"
-	"fmt"
+	// "fmt"
+	"../proto"
 )
 
 func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
@@ -36,19 +37,24 @@ func Encode(event interface{}) []byte {
 	return network.Bytes()
 }
 
-func Send(conn *net.UDPConn, addr *net.UDPAddr,content []byte) {
-	fmt.Fprintln(os.Stderr, "send size=", len(content))
-	_,err := conn.WriteToUDP(content, addr)
-	if err != nil {
-		panic(err.Error())
-	}
+func SendEvent(laddr, raddr *net.TCPAddr, event *proto.Event) {
+	event.SrcAddr = laddr.String()
+	content := Encode(event)
+	// fmt.Fprintln(os.Stderr, "send size=", len(content))
+	conn, err := net.DialTCP("tcp", nil, raddr)
+	CheckErr(err)
+	_, err = conn.Write(content)
+	CheckErr(err)
+	conn.Close()
 }
 
-func SendToCoodinator(conn *net.UDPConn, content []byte) {
-	_,err := conn.Write(content)
-	if err != nil {
-		panic(err.Error())
-	}
+func DecodeEvent(content []byte) (*proto.Event, *net.TCPAddr) {
+	event := &proto.Event{}
+	err := gob.NewDecoder(bytes.NewReader(content)).Decode(event)
+	CheckErr(err)
+	addr, err := net.ResolveTCPAddr("tcp", event.SrcAddr)
+	CheckErr(err)
+	return event, addr
 }
 
 func CheckErr(err error) {

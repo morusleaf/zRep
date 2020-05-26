@@ -15,11 +15,9 @@ type ClientTuple struct {
 
 type Coordinator struct {
 	// local address
-	LocalAddr *net.UDPAddr
-	// socket
-	Socket *net.UDPConn
+	LocalAddr *net.TCPAddr
 	// network topology for server cluster
-	ServerList []*net.UDPAddr
+	ServerList []*net.TCPAddr
 	// initialize the controller status
 	Status int
 
@@ -35,7 +33,7 @@ type Coordinator struct {
 	// h for Pedersen
 
 	// store client address
-	Clients map[string]*net.UDPAddr
+	Clients map[string]*net.TCPAddr
 	// store reputation map
 	BeginningKeyMap map[string]abstract.Point
 	BeginningCommMap map[string]abstract.Point
@@ -62,7 +60,7 @@ type Coordinator struct {
 }
 
 // get last server in topology
-func (c *Coordinator) GetLastServer() *net.UDPAddr {
+func (c *Coordinator) GetLastServer() *net.TCPAddr {
 	if len(c.ServerList) == 0 {
 		return nil
 	}
@@ -70,14 +68,14 @@ func (c *Coordinator) GetLastServer() *net.UDPAddr {
 }
 
 // get first server in topology
-func (c *Coordinator) GetFirstServer() *net.UDPAddr {
+func (c *Coordinator) GetFirstServer() *net.TCPAddr {
 	if len(c.ServerList) == 0 {
 		return nil
 	}
 	return c.ServerList[0]
 }
 
-func (c *Coordinator) AddClient(key abstract.Point, val *net.UDPAddr) {
+func (c *Coordinator) AddClient(key abstract.Point, val *net.TCPAddr) {
 	// delete the client who has same ip address
 	for k,v := range c.Clients {
 		if v.String() == val.String() {
@@ -89,7 +87,7 @@ func (c *Coordinator) AddClient(key abstract.Point, val *net.UDPAddr) {
 }
 
 // add server into topology
-func (c *Coordinator) AddServer(addr *net.UDPAddr){
+func (c *Coordinator) AddServer(addr *net.TCPAddr){
 	c.ServerList = append(c.ServerList,addr)
 }
 

@@ -5,14 +5,15 @@ import (
 	"./util"
 	"./server"
 	"time"
-	"log"
-	"os"
+	// "log"
 	"github.com/dedis/crypto/nist"
 	"github.com/dedis/crypto/random"
 	"github.com/dedis/crypto/abstract"
 	"./proto"
 	"strconv"
 	"./primitive/pedersen"
+	"bytes"
+	"io"
 )
 
 var anonServer *server.AnonServer
@@ -26,21 +27,22 @@ func serverRegister() {
 	params := map[string]interface{}{}
 	event := &proto.Event{EventType:proto.SERVER_REGISTER, Params:params}
 
-	util.Send(anonServer.Socket,anonServer.CoordinatorAddr,util.Encode(event))
+	util.SendEvent(anonServer.LocalAddr, anonServer.CoordinatorAddr, event)
 }
 
 /**
  * start anon server listener to handle event
  */
-func startAnonServerListener() {
+func startAnonServerListener(listener *net.TCPListener) {
 	fmt.Println("[debug] AnonServer Listener started...");
-	buf := make([]byte, 100000)
+	buf := new(bytes.Buffer)
 	for {
-		n,addr,err := anonServer.Socket.ReadFromUDP(buf)
-		if err != nil {
-			log.Fatal(err)
-		}
-		server.Handle(buf, addr, anonServer, n)
+		buf.Reset()
+		conn, err := listener.AcceptTCP()
+		util.CheckErr(err)
+		_, err = io.Copy(buf, conn)
+		util.CheckErr(err)
+		server.Handle(buf.Bytes(), anonServer)
 	}
 }
 
@@ -51,7 +53,7 @@ func startAnonServerListener() {
 func initAnonServer() {
 	config = util.ReadConfig()
 	// load controller ip and port
-	ServerAddr,err := net.ResolveUDPAddr("udp",config["coordinator_ip"]+":"+ config["coordinator_port"])
+	CoordinatorAddr, err := net.ResolveTCPAddr("tcp",config["coordinator_ip"]+":"+ config["coordinator_port"])
 	util.CheckErr(err)
 	// initialize suite
 	suite := nist.NewAES128SHA256QR512()
@@ -61,16 +63,15 @@ func initAnonServer() {
 	pedersenBase := pedersen.CreateMinimalBaseFromSuite(suite)
 
 	anonServer = &server.AnonServer{
-		CoordinatorAddr: ServerAddr,
-		Socket: nil,
+		CoordinatorAddr: CoordinatorAddr,
 		Suite: suite,
 		PrivateKey: a,
 		PublicKey: A,
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
 		IsConnected: false,
-		NextHop: ServerAddr,
-		PreviousHop: ServerAddr,
+		NextHop: CoordinatorAddr,
+		PreviousHop: CoordinatorAddr,
 		KeyMap: make(map[string]abstract.Point),
 		A: nil,
 		Roundkey: RoundKey,
@@ -85,32 +86,29 @@ func launchServer() {
 	// check available port
 	localPort, err := strconv.Atoi(config["local_port"])
 	util.CheckErr(err)
+	var listener *net.TCPListener
 	for i := localPort; i <= localPort+10; i++ {
-		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: i})
+		addr := &net.TCPAddr{IP: net.IPv4zero, Port: i}
+		listener, err = net.ListenTCP("tcp", addr)
 		if err == nil {
-			// set socket
-			anonServer.Socket = conn
-			break;
+			anonServer.LocalAddr = addr
+			break
 		}
 	}
 
 	// start Listener
-	go startAnonServerListener()
+	go startAnonServerListener(listener)
 	// register itself to coordinator
 	serverRegister()
 
 	// wait until register successful
-	for i := 0 ; i < 100 ; i++ {
+	for {
 		if anonServer.IsConnected {
 			break
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 
-	if anonServer.IsConnected != true {
-		log.Fatal("Fails to connect to coordinator")
-		os.Exit(1)
-	}
 	fmt.Println("[debug] Register success...")
 	for {
 		time.Sleep(100000000 * time.Millisecond)

@@ -1,22 +1,17 @@
 package client
 import (
-	"net"
-	"encoding/gob"
 	"../proto"
 	"fmt"
 	"../util"
-	"bytes"
 	"strconv"
 	"math/big"
 	"../primitive/fujiokam"
 	// "github.com/dedis/crypto/abstract"
 )
 
-func Handle(buf []byte, addr *net.UDPAddr, dissentClient *DissentClient, n int) {
+func Handle(buf []byte, dissentClient *DissentClient) {
 	// decode the whole message
-	event := &proto.Event{}
-	err := gob.NewDecoder(bytes.NewReader(buf[:n])).Decode(event)
-	util.CheckErr(err)
+	event, _ := util.DecodeEvent(buf)
 	switch event.EventType {
 	case proto.CLIENT_REGISTER_CONFIRMATION:
 		handleRegisterConfirmation(event.Params, dissentClient)
@@ -86,7 +81,7 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 		"honesty_chal": util.ProtobufEncodeBoolList(dissentClient.AllGnHonestyChallenge),
 	}
 	event := &proto.Event{EventType:proto.GN_HONESTY_CHALLENGE, Params:pm}
-	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
 }
 
 func handleInitPedersenR(params map[string]interface{}, dissentClient *DissentClient) {

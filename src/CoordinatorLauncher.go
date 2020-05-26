@@ -16,6 +16,8 @@ import (
 	"./proto"
 	"./primitive/pedersen"
 	"./primitive/fujiokam"
+	"bytes"
+	"io"
 )
 
 // pointer to coordinator itself
@@ -24,13 +26,16 @@ var anonCoordinator *coordinator.Coordinator
 /**
   * start server listener to handle event
   */
-func startServerListener() {
+func startServerListener(listener *net.TCPListener) {
 	fmt.Println("[debug] Coordinator server listener started...");
-	buf := make([]byte, 100000)
+	buf := new(bytes.Buffer)
 	for {
-		n,addr,err := anonCoordinator.Socket.ReadFromUDP(buf)
+		buf.Reset()
+		conn, err := listener.AcceptTCP()
 		util.CheckErr(err)
-		coordinator.Handle(buf, addr, anonCoordinator, n)
+		_, err = io.Copy(buf, conn)
+		util.CheckErr(err)
+		coordinator.Handle(buf.Bytes(), anonCoordinator)
 	}
 }
 
@@ -39,7 +44,7 @@ func startServerListener() {
   */
 func initCoordinator() {
 	config := util.ReadConfig()
-	ServerAddr,err := net.ResolveUDPAddr("udp", "127.0.0.1:"+config["local_port"])
+	CoordinatorAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:"+config["local_port"])
 	util.CheckErr(err)
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
@@ -49,15 +54,14 @@ func initCoordinator() {
 	prfSecret, prfPublic := fujiokamBase.GenerateAllGnHonestyProof()
 
 	anonCoordinator = &coordinator.Coordinator{
-		LocalAddr: ServerAddr,
-		Socket: nil,
+		LocalAddr: CoordinatorAddr,
 		ServerList: nil,
 		Status: coordinator.CONFIGURATION,
 		Suite: suite,
 		PrivateKey: a,
 		PublicKey: A,
 		G: nil,
-		Clients: make(map[string]*net.UDPAddr),
+		Clients: make(map[string]*net.TCPAddr),
 		BeginningKeyMap: make(map[string]abstract.Point),
 		BeginningCommMap: make(map[string]abstract.Point),
 		NewClientsBuffer: nil,
@@ -84,7 +88,7 @@ func configCommParams() {
 	}
 	event := &proto.Event{EventType: proto.BCAST_PEDERSEN_H, Params: params}
 	for _, server := range anonCoordinator.ServerList {
-		util.Send(anonCoordinator.Socket, server, util.Encode(event))
+		util.SendEvent(anonCoordinator.LocalAddr, server, event)
 	}
 }
 
@@ -127,7 +131,7 @@ func announce() {
 		"HT": util.EncodePoint(anonCoordinator.PedersenBase.HT),
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:params}
-	util.Send(anonCoordinator.Socket, firstServer, util.Encode(event))
+	util.SendEvent(anonCoordinator.LocalAddr, firstServer, event)
 }
 
 /**
@@ -172,7 +176,7 @@ func roundEnd() {
 		"HT": util.EncodePoint(anonCoordinator.PedersenBase.HT),
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-	util.Send(anonCoordinator.Socket, lastServer, util.Encode(event))
+	util.SendEvent(anonCoordinator.LocalAddr, lastServer, event)
 
 	// send rDiff to clients
 	pm = map[string]interface{} {
@@ -181,7 +185,7 @@ func roundEnd() {
 	}
 	event = &proto.Event{EventType:proto.BCAST_PEDERSEN_RDIFF, Params:pm}
 	for _, addr := range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
+		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
 	}
 }
 
@@ -195,7 +199,7 @@ func vote() {
 	pm := map[string]interface{} {}
 	event := &proto.Event{EventType:proto.VOTE, Params:pm}
 	for _, addr :=  range anonCoordinator.Clients {
-		util.Send(anonCoordinator.Socket, addr, util.Encode(event))
+		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
 	}
 }
 
@@ -209,11 +213,10 @@ func launchCoordinator() {
 	// init coordinator
 	initCoordinator()
 	// bind to socket
-	conn, err := net.ListenUDP("udp", anonCoordinator.LocalAddr )
+	listener, err := net.ListenTCP("tcp", anonCoordinator.LocalAddr)
 	util.CheckErr(err)
-	anonCoordinator.Socket = conn
 	// start listener
-	go startServerListener()
+	go startServerListener(listener)
 	fmt.Println("** Note: Type ok to finish the server configuration. **")
 	// read ok to start life cycle
 	waitKeypress("Press ENTER to start:\n")
@@ -242,15 +245,11 @@ func launchCoordinator() {
 		fmt.Println("[coordinator] Announcement phase started...")
 		// start announce phase
 		announce()
-		for i := 0; i < 100; i++ {
+		for {
 			if anonCoordinator.Status == coordinator.MESSAGE {
 				break
 			}
 			time.Sleep(1000 * time.Millisecond)
-		}
-		if anonCoordinator.Status != coordinator.MESSAGE {
-			log.Fatal("Fails to be ready for message phase")
-			os.Exit(1)
 		}
 		// start message and vote phase
 		fmt.Println("[coordinator] Messaging phase started...")

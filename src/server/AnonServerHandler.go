@@ -3,7 +3,6 @@ import (
 	"net"
 	"../proto"
 	"encoding/gob"
-	"bytes"
 	"../util"
 	"fmt"
 	"github.com/dedis/crypto/abstract"
@@ -15,18 +14,16 @@ import (
 
 var anonServer *AnonServer
 
-func Handle(buf []byte, addr *net.UDPAddr, tmpServer *AnonServer, n int) {
+func Handle(buf []byte, tmpServer *AnonServer) {
 	// decode the whole message
-	byteArr := make([]util.ByteArray,2)
+	byteArr := make([]util.ByteArray, 2)
 	gob.Register(byteArr)
 
 	anonServer = tmpServer
-	event := &proto.Event{}
-	err := gob.NewDecoder(bytes.NewReader(buf[:n])).Decode(event)
-	util.CheckErr(err)
+	event, addr := util.DecodeEvent(buf)
 	switch event.EventType {
 	case proto.SERVER_REGISTER_REPLY:
-		handleServerRegisterReply(event.Params, addr);
+		handleServerRegisterReply(event.Params, addr)
 		break
 	case proto.ANNOUNCEMENT:
 		handleAnnouncement(event.Params);
@@ -114,7 +111,7 @@ func handleRoundEnd(params map[string]interface{}) {
 			"HT": util.EncodePoint(HT),
 		}
 		event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-		util.Send(anonServer.Socket, anonServer.PreviousHop, util.Encode(event))
+		util.SendEvent(anonServer.LocalAddr, anonServer.PreviousHop, event)
 		// reset RoundKey and key map
 		anonServer.Roundkey = anonServer.Suite.Secret().Pick(random.Stream)
 		anonServer.KeyMap = make(map[string]abstract.Point)
@@ -159,7 +156,7 @@ func handleRoundEnd(params map[string]interface{}) {
 		"HT": util.EncodePoint(HT),
 	}
 	event := &proto.Event{EventType:proto.ROUND_END, Params:pm}
-	util.Send(anonServer.Socket, anonServer.PreviousHop, util.Encode(event)) 
+	util.SendEvent(anonServer.LocalAddr, anonServer.PreviousHop, event)
 
 	// reset RoundKey and key map
 	anonServer.Roundkey = anonServer.Suite.Secret().Pick(random.Stream)
@@ -217,14 +214,14 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"pcomm": params["pcomm"].([]byte),
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_SERVERSIDE, Params:pm}
-	util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))
+	util.SendEvent(anonServer.LocalAddr, anonServer.NextHop, event)
 	// add into key map
 	fmt.Println("[debug] Receive client register request... ")
 	anonServer.KeyMap[newKey.String()] = publicKey
 }
 
 func handleUpdateNextHop(params map[string]interface{}) {
-	addr, err := net.ResolveUDPAddr("udp",params["next_hop"].(string))
+	addr, err := net.ResolveTCPAddr("tcp",params["next_hop"].(string))
 	util.CheckErr(err)
 	anonServer.NextHop = addr
 }
@@ -281,7 +278,7 @@ func handleAnnouncement(params map[string]interface{}) {
 			"HT": util.EncodePoint(HT),
 		}
 		event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
-		util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))
+		util.SendEvent(anonServer.LocalAddr, anonServer.NextHop, event)
 		return
 	}
 
@@ -324,14 +321,14 @@ func handleAnnouncement(params map[string]interface{}) {
 		"HT": util.EncodePoint(HT),
 	}
 	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
-	util.Send(anonServer.Socket, anonServer.NextHop, util.Encode(event))
+	util.SendEvent(anonServer.LocalAddr, anonServer.NextHop, event)
 }
 
 // handle server register reply
-func handleServerRegisterReply(params map[string]interface{}, addr *net.UDPAddr) {
+func handleServerRegisterReply(params map[string]interface{}, addr *net.TCPAddr) {
 	reply := params["reply"].(bool)
 	if val, ok := params["prev_server"]; ok {
-		ServerAddr, _  := net.ResolveUDPAddr("udp",val.(string))
+		ServerAddr, _  := net.ResolveTCPAddr("tcp",val.(string))
 		anonServer.PreviousHop = ServerAddr
 	}
 	if reply {
@@ -352,5 +349,5 @@ func handleServerRegisterReply(params map[string]interface{}, addr *net.UDPAddr)
 	}
 	// tell coordinator updated h
 	event := &proto.Event{EventType:proto.UPDATE_PEDERSEN_H, Params:pm}
-	util.Send(anonServer.Socket, addr, util.Encode(event))
+	util.SendEvent(anonServer.LocalAddr, addr, event)
 }

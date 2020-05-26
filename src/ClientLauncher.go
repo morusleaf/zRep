@@ -12,12 +12,14 @@ import (
 	"bufio"
 	"os"
 	"strings"
-	"log"
+	// "log"
 	"time"
 	"math/big"
 	"./primitive/pedersen"
 	"./primitive/pedersen_fujiokam"
 	"./primitive/lrs"
+	"bytes"
+	"io"
 )
 
 // pointer to client itself
@@ -34,21 +36,22 @@ func register() {
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONTROLLERSIDE, Params:params}
 
-	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
 }
 
 /**
   * start listener to handle event
   */
-func startClientListener() {
+func startClientListener(listener *net.TCPListener) {
 	fmt.Println("[debug] Client Listener started...");
-	buf := make([]byte, 100000)
+	buf := new(bytes.Buffer)
 	for {
-		n,addr,err := dissentClient.Socket.ReadFromUDP(buf)
-		if err != nil {
-			log.Fatal(err)
-		}
-		client.Handle(buf, addr, dissentClient, n) // a goroutine handles conn so that the loop can accept other connections
+		buf.Reset()
+		conn, err := listener.AcceptTCP()
+		util.CheckErr(err)
+		_, err = io.Copy(buf, conn)
+		util.CheckErr(err)
+		client.Handle(buf.Bytes(), dissentClient) // a goroutine handles conn so that the loop can accept other connections
 	}
 }
 
@@ -104,7 +107,7 @@ func sendMsg(ind int, text string) {
 	}
 	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
 	// send to coordinator
-	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
 }
 
 /**
@@ -135,7 +138,7 @@ func sendVote(msgID, vote int) {
 	}
 	event := &proto.Event{EventType:proto.VOTE, Params:params}
 	// send to coordinator
-	util.SendToCoodinator(dissentClient.Socket, util.Encode(event))
+	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
 }
 
 
@@ -145,14 +148,14 @@ func sendVote(msgID, vote int) {
 func initClient() {
 	// load controller ip and port
 	config := util.ReadConfig()
-	ServerAddr,err := net.ResolveUDPAddr("udp", config["coordinator_ip"]+":"+ config["coordinator_port"])
+	CoordinatorAddr, err := net.ResolveTCPAddr("tcp",config["coordinator_ip"]+":"+ config["coordinator_port"])
 	util.CheckErr(err)
 	// initialize suite
 	suite := nist.NewAES128SHA256QR512()
 	a := suite.Secret().Pick(random.Stream)
 	A := suite.Point().Mul(nil, a)
 	dissentClient = &client.DissentClient{
-		CoordinatorAddr: ServerAddr,
+		CoordinatorAddr: CoordinatorAddr,
 		Socket: nil,
 		Status: client.CONFIGURATION,
 		Suite: suite,
@@ -170,14 +173,16 @@ func initClient() {
 func launchClient() {
 	// initialize parameters and server configurations
 	initClient()
-	fmt.Println("[debug] Client started...");
-	// make udp connection to controller
-	conn, err := net.DialUDP("udp", nil, dissentClient.CoordinatorAddr)
+	// automatically choose a port
+	tmpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 	util.CheckErr(err)
-	// set socket
-	dissentClient.Socket = conn
+	// addr := &net.TCPAddr{IP: net.IPv4zero, Port: 0}
+	listener, err := net.ListenTCP("tcp", tmpAddr)
+	dissentClient.LocalAddr = listener.Addr().(*net.TCPAddr)
+	util.CheckErr(err)
+	fmt.Println("[debug] Client started...");
 	// start Listener
-	go startClientListener()
+	go startClientListener(listener)
 	fmt.Println("[debug] My public key is: ")
 	fmt.Println(dissentClient.PublicKey)
 	// register itself to controller
@@ -209,7 +214,6 @@ func launchClient() {
 			break Loop
 		}
 	}
-	// close connection
-	conn.Close()
+	listener.Close()
 	fmt.Println("[debug] Exit system...");
 }

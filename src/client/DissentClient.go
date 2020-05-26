@@ -12,8 +12,9 @@ import (
 
 type DissentClient struct {
 	// client-side config
-	CoordinatorAddr *net.UDPAddr
-	Socket *net.UDPConn
+	CoordinatorAddr *net.TCPAddr
+	LocalAddr *net.TCPAddr
+	Socket *net.TCPConn
 	Status int
 	// crypto variables
 	Suite abstract.Suite
