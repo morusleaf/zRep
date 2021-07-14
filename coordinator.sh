@@ -1,2 +1,2 @@
 #!/bin/sh
-go run src/*.go coordinator
+go run cmd/main.go coordinator

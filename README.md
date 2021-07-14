@@ -14,7 +14,7 @@ The following assumes you are using Linux.
 
 4.  Run `go get github.com/dedis/crypto@38ce20af` to install dependent cryptography library.
 
-    Run `go get github.com/dedis/protobuf` to install message encoding library.
+    Run `go get go.dedis.ch/protobuf` to install message encoding library.
 
 5.  Make sure `openssl` has been installed and can be found from `$PATH`. zRep needs it to generate random safe primes.
 

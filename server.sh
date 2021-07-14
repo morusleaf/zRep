@@ -1,2 +1,2 @@
 #!/bin/sh
-go run src/*.go server
+go run cmd/main.go server
