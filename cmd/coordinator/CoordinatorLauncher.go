@@ -66,6 +66,7 @@ func initCoordinator() {
 		BeginningCommMap: make(map[string]abstract.Point),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
+		Bridges: make(map[string]BridgeInfo),
 		EndingCommMap: make(map[string]abstract.Point),
 		EndingKeyMap: make(map[string]abstract.Point),
 		ReputationDiffMap: make(map[string]int),
@@ -187,6 +188,9 @@ func roundEnd() {
 	for _, addr := range anonCoordinator.Clients {
 		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
 	}
+
+	// clear bridges
+	anonCoordinator.ClearBridges()
 }
 
 /**

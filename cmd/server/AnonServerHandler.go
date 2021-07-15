@@ -23,12 +23,19 @@ func Handle(buf []byte, tmpServer *AnonServer) {
 
 	anonServer = tmpServer
 	event, addr := util.DecodeEvent(buf)
+	fmt.Println(event.EventType)
 	switch event.EventType {
 	case proto.SERVER_REGISTER_REPLY:
 		handleServerRegisterReply(event.Params, addr)
 		break
 	case proto.ANNOUNCEMENT:
-		handleAnnouncement(event.Params);
+		handleAnnouncement(event.Params)
+		break
+	case proto.ANNOUNCEMENT_FINALIZE:
+		handleAnnouncementFinalize(event.Params)
+		break
+	case proto.SIGN_ASSIGNMENTS:
+		handleSignAssignments(event.Params)
 		break
 	case proto.UPDATE_NEXT_HOP:
 		handleUpdateNextHop(event.Params)
@@ -128,7 +135,7 @@ func handleRoundEnd(params map[string]interface{}) {
 
 	rand := anonServer.Suite.Cipher(abstract.RandomKey)
 	// *** perform neff shuffle here ***
-	Xbar, Ybar, _, Ytmp, prover := neffShuffle(Xori,newKeys, rand)
+	Xbar, Ybar, _, Ytmp, prover := neffShuffle(Xori, newKeys, rand)
 	prf, err := proof.HashProve(anonServer.Suite, "PairShuffle", rand, prover)
 	util.CheckErr(err)
 
@@ -326,11 +333,43 @@ func handleAnnouncement(params map[string]interface{}) {
 	util.SendEvent(anonServer.LocalAddr, anonServer.NextHop, event)
 }
 
+// handle announcement finalize, which receives parameters from coordinator
+func handleAnnouncementFinalize(params map[string]interface{}) {
+	g := util.DecodePoint(anonServer.Suite, params["g"].([]byte))
+	
+	// update GT & HT
+	GT := util.DecodePoint(anonServer.Suite, params["GT"].([]byte))
+	HT := util.DecodePoint(anonServer.Suite, params["HT"].([]byte))
+	anonServer.PedersenBase.GT = GT
+	anonServer.PedersenBase.HT = HT
+
+	//construct Decrypted reputation map
+	keyList := util.ProtobufDecodePointList(params["keys"].([]byte))
+	valList := util.ProtobufDecodePointList(params["vals"].([]byte))
+	anonServer.EndingCommMap = make(map[string]abstract.Point)
+	anonServer.EndingKeyMap = make(map[string]abstract.Point)
+	// anonServer.ReputationDiffMap = make(map[string]int)
+	// anonServer.AllClientsPublicKeys = keyList
+
+	for i := 0; i < len(keyList); i++ {
+		anonServer.AddIntoEndingMap(keyList[i], valList[i])
+	}
+
+	// set new g
+	anonServer.G = g
+}
+
+func handleSignAssignments(params map[string]interface{}) {
+	fmt.Println("hello")
+}
+
 // handle server register reply
 func handleServerRegisterReply(params map[string]interface{}, addr *net.TCPAddr) {
 	reply := params["reply"].(bool)
+	// store the address of previous hop
 	if val, ok := params["prev_server"]; ok {
-		ServerAddr, _  := net.ResolveTCPAddr("tcp",val.(string))
+		ServerAddr, _ := net.ResolveTCPAddr("tcp",val.(string))
+		// we assume resolving TCP address never fails
 		anonServer.PreviousHop = ServerAddr
 	}
 	if reply {

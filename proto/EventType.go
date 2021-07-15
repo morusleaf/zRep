@@ -42,3 +42,11 @@ const UPDATE_PEDERSEN_H = 18
 const BCAST_PEDERSEN_RDIFF = 19
 
 const INIT_PEDERSEN_R = 20
+// client posts a new bridge
+const POST_BRIDGE = 21
+// client requests multiple bridges
+const REQUEST_BRIDGES = 22
+// coordinator ask other servers to sign bridge assignments
+const SIGN_ASSIGNMENTS = 23
+
+const ANNOUNCEMENT_FINALIZE = 24

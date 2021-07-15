@@ -20,6 +20,8 @@ type AnonServer struct {
 	OnetimePseudoNym abstract.Point
 	G abstract.Point
 
+	EndingKeyMap map[string]abstract.Point
+	EndingCommMap map[string]abstract.Point
 
 	// buffer data
 	IsConnected bool
@@ -37,4 +39,10 @@ type AnonServer struct {
 
 	PedersenBase *pedersen.PedersenBase
 
+}
+
+func (s *AnonServer) AddIntoEndingMap(key abstract.Point, val abstract.Point) {
+	keyStr := key.String()
+	s.EndingKeyMap[keyStr] = key
+	s.EndingCommMap[keyStr] = val
 }

@@ -12,6 +12,7 @@ import (
 	"zRep/primitive/pedersen_fujiokam"
 	"zRep/proto"
 	"zRep/util"
+	"zRep/cmd/bridge"
 
 	"github.com/dedis/crypto/abstract"
 )
@@ -41,6 +42,12 @@ func Handle(buf []byte, tmpCoordinator *Coordinator) {
 		break
 	case proto.GN_HONESTY_CHALLENGE:
 		handleGnHonestyChallenge(event.Params, addr)
+		break
+	case proto.POST_BRIDGE:
+		handlePostBridge(event.Params, addr)
+		break
+	case proto.REQUEST_BRIDGES:
+		handleRequestBridges(event.Params, addr)
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, addr)
@@ -100,8 +107,14 @@ func handleAnnouncement(params map[string]interface{}) {
 		"GT": params["GT"].([]byte),
 		"HT": params["HT"].([]byte),
 	}
-	event := &proto.Event{EventType:proto.ANNOUNCEMENT, Params:pm}
+	event := &proto.Event{EventType:proto.ANNOUNCEMENT_FINALIZE, Params:pm}
 	for _,addr := range anonCoordinator.Clients {
+		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+	}
+
+	// distribute g adn table to servers
+	// event = &proto.Event{EventType:proto.ANNOUNCEMENT_FINALIZE, Params:pm}
+	for _,addr := range anonCoordinator.ServerList {
 		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
 	}
 
@@ -156,7 +169,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}, addr *net
 	anonCoordinator.AddClient(publicKey, addr)
 
 	// compute Pedersen commitment
-	xInit := anonCoordinator.Suite.Secret().SetInt64(0)
+	xInit := anonCoordinator.Suite.Secret().SetInt64(int64(bridge.StartingCredit))
 	PComm, r := anonCoordinator.PedersenBase.Commit(xInit)
 	byteR, err := r.MarshalBinary()
 	util.CheckErr(err)
@@ -220,7 +233,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	anonCoordinator.AddClientInBuffer(nym, PComm)
 }
 
-func handleGnHonestyChallenge(params map[string]interface{}, addr *net.TCPAddr) {
+func handleGnHonestyChallenge(params map[string]interface{}, senderAddr *net.TCPAddr) {
 	challenge := util.ProtobufDecodeBoolList(params["honesty_chal"].([]byte))
 	fmt.Println("[debug] Received challenge, start answering...")
 	base := anonCoordinator.FujiOkamBase
@@ -230,7 +243,80 @@ func handleGnHonestyChallenge(params map[string]interface{}, addr *net.TCPAddr) 
 		"honesty_ans": util.ProtobufEncodeBigIntList(answer),
 	}
 	event := &proto.Event{EventType:proto.GN_HONESTY_ANSWER, Params:pm}
-	util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+	util.SendEvent(anonCoordinator.LocalAddr, senderAddr, event)
+}
+// verify the posting message and record the bridge
+func handlePostBridge(params map[string]interface{}, senderAddr *net.TCPAddr) {
+	// get info from the request
+	bridgeAddr := params["bridge_addr"].(string)
+	byteSig := params["signature"].([]byte)
+	nym := anonCoordinator.Suite.Point()
+	byteNym := params["nym"].([]byte)
+	err := nym.UnmarshalBinary(byteNym)
+	util.CheckErr(err)
+
+	fmt.Println("[debug] Receiving post from " + senderAddr.String() + ": " + bridgeAddr)
+
+	// verify the signature
+	byteMsg := bridge.MessageOfPostBridge(params)
+	err = util.ElGamalVerify(anonCoordinator.Suite, byteMsg, nym, byteSig, anonCoordinator.G)
+	if err != nil {
+		fmt.Print("[note]** Fails to verify the message...")
+		return
+	}
+
+	// record the bridge
+	// Note: we assume the client does not provide duplicated bridges
+	anonCoordinator.AddBridge(bridgeAddr, nym)
+	fmt.Println("[debug] Finished adding bridge " + bridgeAddr)
+}
+
+// allocate bridges and ask all servers' signatures
+func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr) {
+	// get info from the request
+	ind := params["ind"].(int)
+	byteSig := params["signature"].([]byte)
+	nymR := anonCoordinator.Suite.Point()
+	byteNymR := params["nym"].([]byte)
+	err := nymR.UnmarshalBinary(byteNymR)
+	util.CheckErr(err)
+	PCommr := anonCoordinator.EndingCommMap[nymR.String()]
+
+	fmt.Println("[debug] Receiving reqeust from " + senderAddr.String() + ": " + strconv.Itoa(ind))
+
+	// verify the signature
+	byteMsg := bridge.MessageOfRequestBridges(params)
+	err = util.ElGamalVerify(anonCoordinator.Suite, byteMsg, nymR, byteSig, anonCoordinator.G)
+	if err != nil {
+		fmt.Print("[note]** Fails to verify the message...")
+		return
+	}
+	fmt.Println("[debug] Signature check passed")
+
+	bridge.VerifyInd(params, PCommr, anonCoordinator.Suite, anonCoordinator.PedersenBase, anonCoordinator.FujiOkamBase)
+
+	// create assignment tuples from unused bridges
+	assignments := anonCoordinator.AssignBridges(ind, nymR)
+
+	fmt.Println(assignments)
+
+	pm := map[string]interface{}{
+		"assignments" : assignments,
+		"ind": ind,
+		"nym" : params["nym"].([]byte),
+		"FOCommd": params["FOCommd"].([]byte),
+		"PCommd": params["PCommd"].([]byte),
+		"PCommind": params["PCommind"].([]byte),
+		"rind": params["rind"].([]byte),
+		"arg_nonneg": params["arg_nonneg"].([]byte),
+		"arg_equal": params["arg_equal"].([]byte),
+	}
+	event := &proto.Event{EventType:proto.SIGN_ASSIGNMENTS, Params:pm}
+	// send to all the servers
+	for _,addr := range anonCoordinator.ServerList {
+		fmt.Println(addr)
+		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+	}
 }
 
 // verify the msg and broadcast to clients

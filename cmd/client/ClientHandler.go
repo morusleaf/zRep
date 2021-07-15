@@ -23,8 +23,8 @@ func Handle(buf []byte, dissentClient *DissentClient) {
 	case proto.GN_HONESTY_ANSWER:
 		handleGnHonestyAnswer(event.Params, dissentClient)
 		break
-	case proto.ANNOUNCEMENT:
-		handleAnnouncement(event.Params, dissentClient)
+	case proto.ANNOUNCEMENT_FINALIZE:
+		handleAnnouncementFinalize(event.Params, dissentClient)
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, dissentClient)
@@ -163,7 +163,7 @@ func handleMsgReply(params map[string]interface{}) {
 }
 
 // set one-time pseudonym and g, and print out info
-func handleAnnouncement(params map[string]interface{}, dissentClient *DissentClient) {
+func handleAnnouncementFinalize(params map[string]interface{}, dissentClient *DissentClient) {
 	// set One-time pseudonym and g
 	g := dissentClient.Suite.Point()
 	// deserialize g and calculate nym

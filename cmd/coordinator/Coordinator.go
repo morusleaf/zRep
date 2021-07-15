@@ -6,6 +6,7 @@ import (
 	"zRep/primitive/fujiokam"
 	"zRep/primitive/lrs"
 	"zRep/primitive/pedersen"
+	"zRep/cmd/bridge"
 
 	"github.com/dedis/crypto/abstract"
 )
@@ -13,6 +14,11 @@ import (
 type ClientTuple struct {
 	Nym abstract.Point
 	PComm abstract.Point
+}
+
+type BridgeInfo struct {
+	Nym abstract.Point
+	Used bool
 }
 
 type Coordinator struct {
@@ -46,6 +52,8 @@ type Coordinator struct {
 	MsgLog []abstract.Point
 	// record each vote signature's y0
 	VoteRecords []*big.Int
+
+	Bridges map[string]BridgeInfo
 
 	EndingKeyMap map[string]abstract.Point
 	EndingCommMap map[string]abstract.Point
@@ -97,6 +105,46 @@ func (c *Coordinator) AddServer(addr *net.TCPAddr){
 func (c *Coordinator) AddMsgLog(log abstract.Point) int{
 	c.MsgLog = append(c.MsgLog,log)
 	return len(c.MsgLog)
+}
+
+func (c *Coordinator) AddBridge(bridgeAddr string, nym abstract.Point) {
+	c.Bridges[bridgeAddr] = BridgeInfo{Nym:nym, Used:false}
+}
+
+func (c *Coordinator) GetBridge() *bridge.Bridge {
+	for bridgeAddr,info := range c.Bridges {
+		if !info.Used {
+			return &bridge.Bridge{Addr:bridgeAddr, Nym:info.Nym}
+		}
+	}
+	return nil
+}
+
+func (c *Coordinator) GetBridges(num int) []bridge.Bridge {
+	res := []bridge.Bridge{}
+	for num > 0 {
+		br := c.GetBridge()
+		if br == nil {
+			return res
+		}
+		res = append(res, *br)
+		num = num - 1
+	}
+	return res
+}
+
+func (c *Coordinator) AssignBridges(num int, nymR abstract.Point) []bridge.Assignment {
+	brs := c.GetBridges(num)
+	res := []bridge.Assignment{}
+	for _,br := range brs {
+		assignment := bridge.Assignment{NymR:nymR, Bridge:br}
+		res = append(res, assignment)
+	}
+	return res
+}
+
+func (c *Coordinator) ClearBridges() {
+	c.Bridges = make(map[string]BridgeInfo)
 }
 
 // get reputation
