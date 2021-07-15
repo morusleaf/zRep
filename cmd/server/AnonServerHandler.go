@@ -3,10 +3,13 @@ package server
 import (
 	"encoding/gob"
 	"fmt"
+	"math/big"
 	"net"
+	"zRep/cmd/bridge"
 	"zRep/proto"
 	"zRep/util"
 	"zRep/util/shuffle"
+	"zRep/primitive/fujiokam"
 
 	"github.com/dedis/crypto/abstract"
 	"github.com/dedis/crypto/proof"
@@ -360,7 +363,32 @@ func handleAnnouncementFinalize(params map[string]interface{}) {
 }
 
 func handleSignAssignments(params map[string]interface{}) {
-	fmt.Println("hello")
+	// extract info from params
+	nymR := anonServer.Suite.Point()
+	byteNymR := params["nym"].([]byte)
+	err := nymR.UnmarshalBinary(byteNymR)
+	util.CheckErr(err)
+	PCommr := anonServer.EndingCommMap[nymR.String()]
+
+	// verify the proof
+	if !bridge.VerifyInd(params, PCommr, anonServer.Suite, anonServer.PedersenBase, anonServer.FujiOkamBase) {
+		fmt.Print("[note]** Fails to verify the proof...")
+		return
+	}
+
+	// sign tuples
+	assignments := bridge.ProtobufDecodeAssignmentList(params["assignments"].([]byte))
+	sigs := [][]byte{}
+	for _,assignment := range assignments {
+		byteAssignment := bridge.EncodeAssignment(&assignment)
+		rand := anonServer.Suite.Cipher([]byte("example"))
+		sig := util.ElGamalSign(anonServer.Suite, rand, byteAssignment, anonServer.PrivateKey, anonServer.G)
+		sigs = append(sigs, sig)
+	}
+
+	fmt.Println(sigs)
+
+	// send signatures back to coordinator
 }
 
 // handle server register reply
@@ -375,6 +403,18 @@ func handleServerRegisterReply(params map[string]interface{}, addr *net.TCPAddr)
 	if reply {
 		anonServer.IsConnected = true
 	}
+
+	// setup fujiokam
+	N := new(big.Int).SetBytes(params["n"].([]byte))
+	fujiokamBase := fujiokam.CreateMinimumBase(anonServer.Suite, N)
+	fujiokamBase.G1 = fujiokamBase.Point().FromBinary(params["g1"].([]byte))
+	fujiokamBase.G2 = fujiokamBase.Point().FromBinary(params["g2"].([]byte))
+	fujiokamBase.G3 = fujiokamBase.Point().FromBinary(params["g3"].([]byte))
+	fujiokamBase.G4 = fujiokamBase.Point().FromBinary(params["g4"].([]byte))
+	fujiokamBase.G5 = fujiokamBase.Point().FromBinary(params["g5"].([]byte))
+	fujiokamBase.G6 = fujiokamBase.Point().FromBinary(params["g6"].([]byte))
+	fujiokamBase.H1 = fujiokamBase.Point().FromBinary(params["h1"].([]byte))
+	anonServer.FujiOkamBase = fujiokamBase
 
 	// update h
 	h := anonServer.Suite.Point()

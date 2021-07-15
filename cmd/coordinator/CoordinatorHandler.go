@@ -143,16 +143,25 @@ func handleServerRegister(addr *net.TCPAddr) {
 	}
 	byteH, err := anonCoordinator.PedersenBase.HT.MarshalBinary()
 	util.CheckErr(err)
-	// tell new server its prev_server is last server
+	// tell new server its prev_server is last server and primtive's parameters
+	fujiokamBase := anonCoordinator.FujiOkamBase
 	pm1 := map[string]interface{}{
 		"reply": true,
 		"prev_server": lastServer.String(),
 		"h": byteH,
+		"n": fujiokamBase.N.Bytes(),
+		"g1": fujiokamBase.G1.ToBinary(),
+		"g2": fujiokamBase.G2.ToBinary(),
+		"g3": fujiokamBase.G3.ToBinary(),
+		"g4": fujiokamBase.G4.ToBinary(),
+		"g5": fujiokamBase.G5.ToBinary(),
+		"g6": fujiokamBase.G6.ToBinary(),
+		"h1": fujiokamBase.H1.ToBinary(),
 	}
 	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
 	util.SendEvent(anonCoordinator.LocalAddr, addr, event1)
 
-	anonCoordinator.AddServer(addr);
+	anonCoordinator.AddServer(addr)
 }
 
 func handleUpdatePedersenH(params map[string]interface{}) {
@@ -293,15 +302,16 @@ func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr
 	}
 	fmt.Println("[debug] Signature check passed")
 
-	bridge.VerifyInd(params, PCommr, anonCoordinator.Suite, anonCoordinator.PedersenBase, anonCoordinator.FujiOkamBase)
+	if !bridge.VerifyInd(params, PCommr, anonCoordinator.Suite, anonCoordinator.PedersenBase, anonCoordinator.FujiOkamBase) {
+		fmt.Print("[note]** Fails to verify the proof...")
+		return
+	}
 
 	// create assignment tuples from unused bridges
 	assignments := anonCoordinator.AssignBridges(ind, nymR)
 
-	fmt.Println(assignments)
-
 	pm := map[string]interface{}{
-		"assignments" : assignments,
+		"assignments" : bridge.ProtobufEncodeAssignmentList(assignments),
 		"ind": ind,
 		"nym" : params["nym"].([]byte),
 		"FOCommd": params["FOCommd"].([]byte),
@@ -314,14 +324,13 @@ func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr
 	event := &proto.Event{EventType:proto.SIGN_ASSIGNMENTS, Params:pm}
 	// send to all the servers
 	for _,addr := range anonCoordinator.ServerList {
-		fmt.Println(addr)
 		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
 	}
 }
 
 // verify the msg and broadcast to clients
 func handleMsg(params map[string]interface{}, addr *net.TCPAddr) {
-	// get info from the request
+	// extract info from params
 	text := params["text"].(string)
 	byteSig := params["signature"].([]byte)
 	nym := anonCoordinator.Suite.Point()

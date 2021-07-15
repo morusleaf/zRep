@@ -304,7 +304,7 @@ func Launch() {
 			bridgeAddr := commands[1]
 			postBridge(bridgeAddr)
 			break
-		case "request":
+		case "get":
 			ind,_ := strconv.Atoi(commands[1])
 			requestBridges(ind)
 			break

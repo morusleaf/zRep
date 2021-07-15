@@ -3,6 +3,7 @@ package server
 import (
 	"net"
 	"zRep/primitive/pedersen"
+	"zRep/primitive/fujiokam"
 
 	"github.com/dedis/crypto/abstract"
 )
@@ -38,6 +39,7 @@ type AnonServer struct {
 	Roundkey abstract.Secret
 
 	PedersenBase *pedersen.PedersenBase
+	FujiOkamBase *fujiokam.FujiOkamBase
 
 }
 

@@ -1,8 +1,15 @@
 package bridge
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
+	"log"
+	"encoding/gob"
+
+	"reflect"
+	"github.com/dedis/crypto/nist"
+	"go.dedis.ch/protobuf"
 
 	"github.com/dedis/crypto/abstract"
 	"zRep/util"
@@ -20,7 +27,8 @@ type Bridge struct {
 
 type Assignment struct {
 	NymR abstract.Point // bridge requester's nym
-	Bridge Bridge // bridge
+	Addr string
+	Nym abstract.Point // bridge provider's nym
 }
 
 func VerifyInd(params map[string]interface{}, PCommr abstract.Point, suite abstract.Suite, pedersenBase *pedersen.PedersenBase, fujiokamBase *fujiokam.FujiOkamBase) bool {
@@ -80,6 +88,7 @@ func VerifyInd(params map[string]interface{}, PCommr abstract.Point, suite abstr
 // ****************************************************************************
 // Extract message body from package
 // ****************************************************************************
+
 func MessageOfRequestBridges(params map[string]interface{}) []byte {
 	ind := params["ind"].(int)
 	byteInd := util.IntToByte(ind)
@@ -97,4 +106,52 @@ func MessageOfPostBridge(params map[string]interface{}) []byte {
 	bridgeAddr := params["bridge_addr"].(string)
 	msg := append([]byte(bridgeAddr), params["nym"].([]byte)...)
 	return msg
+}
+
+// ****************************************************************************
+// Encoder / Decoder
+// ****************************************************************************
+
+type AssignmentList struct {
+	Assignments []Assignment
+}
+
+func ProtobufEncodeAssignmentList(plist []Assignment) []byte {
+	bytes, err := protobuf.Encode(&AssignmentList{plist})
+	util.CheckErr(err)
+	return bytes
+}
+
+func ProtobufDecodeAssignmentList(bytes []byte) []Assignment {
+	var aAssignment Assignment
+	var tAssignment = reflect.TypeOf(&aAssignment).Elem()
+	suite := nist.NewAES128SHA256QR512()
+	cons := protobuf.Constructors {
+		tAssignment: func()interface{} {
+			return Assignment{NymR: suite.Point(), Addr: "", Nym: suite.Point()}
+		},
+	}
+
+	var msg AssignmentList
+	if err := protobuf.DecodeWithConstructors(bytes, &msg, cons); err != nil {
+		log.Fatal(err)
+	}
+	return msg.Assignments
+}
+
+func EncodeAssignment(assignment *Assignment) []byte {
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	err := encoder.Encode(assignment)
+	util.CheckErr(err)
+	return buf.Bytes()
+}
+
+func DecodeAssignment(data []byte) *Assignment {
+	assignment := new(Assignment)
+	buf := bytes.NewReader(data)
+	decoder := gob.NewDecoder(buf)
+	err := decoder.Decode(assignment)
+	util.CheckErr(err)
+	return assignment
 }

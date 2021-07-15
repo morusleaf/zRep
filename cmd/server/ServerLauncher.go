@@ -71,6 +71,8 @@ func initAnonServer() {
 		PublicKey: A,
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
+		EndingCommMap: make(map[string]abstract.Point),
+		EndingKeyMap: make(map[string]abstract.Point),
 		IsConnected: false,
 		NextHop: CoordinatorAddr,
 		PreviousHop: CoordinatorAddr,
@@ -78,6 +80,7 @@ func initAnonServer() {
 		A: nil,
 		Roundkey: RoundKey,
 		PedersenBase: pedersenBase,
+		FujiOkamBase: nil,
 	}
 }
 

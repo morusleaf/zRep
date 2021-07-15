@@ -137,7 +137,7 @@ func (c *Coordinator) AssignBridges(num int, nymR abstract.Point) []bridge.Assig
 	brs := c.GetBridges(num)
 	res := []bridge.Assignment{}
 	for _,br := range brs {
-		assignment := bridge.Assignment{NymR:nymR, Bridge:br}
+		assignment := bridge.Assignment{NymR:nymR, Nym:br.Nym, Addr:br.Addr}
 		res = append(res, assignment)
 	}
 	return res
