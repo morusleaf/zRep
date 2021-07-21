@@ -36,6 +36,22 @@ func SerializeTwoDimensionArray(arr [][]byte) []ByteArray{
 	return byteArr
 }
 
+func Encode2DByteArray(arr [][]byte) []byte {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(arr)
+	if err != nil {
+		panic(err.Error())
+	}
+	return buf.Bytes()
+}
+
+func Decode2DByteArray(data []byte) (arr [][]byte) {
+	buf := bytes.NewReader(data)
+	err := gob.NewDecoder(buf).Decode(&arr)
+	CheckErr(err)
+	return
+}
+
 func Encode(event interface{}) []byte {
 	var network bytes.Buffer
 	err := gob.NewEncoder(&network).Encode(event)

@@ -196,7 +196,7 @@ func handleAnnouncementFinalize(params map[string]interface{}, dissentClient *Di
 	fmt.Println("[client] One-Time pseudonym for this round is ");
 	fmt.Println(nym);
 	fmt.Println("[client] My reputation is", dissentClient.Reputation)
-	fmt.Println("[client] Messaging Phase begins.(msg <indicator> <msg_text>)");
+	fmt.Println("[client] Messaging Phase begins.(post <addr> | get <indicator>)");
 	fmt.Print("cmd >> ");
 }
 

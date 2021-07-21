@@ -311,7 +311,7 @@ func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr
 	assignments := anonCoordinator.AssignBridges(ind, nymR)
 
 	pm := map[string]interface{}{
-		"assignments" : bridge.ProtobufEncodeAssignmentList(assignments),
+		"assignments" : bridge.EncodeAssignmentList(assignments),
 		"ind": ind,
 		"nym" : params["nym"].([]byte),
 		"FOCommd": params["FOCommd"].([]byte),

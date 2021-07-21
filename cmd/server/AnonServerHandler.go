@@ -26,7 +26,6 @@ func Handle(buf []byte, tmpServer *AnonServer) {
 
 	anonServer = tmpServer
 	event, addr := util.DecodeEvent(buf)
-	fmt.Println(event.EventType)
 	switch event.EventType {
 	case proto.SERVER_REGISTER_REPLY:
 		handleServerRegisterReply(event.Params, addr)
@@ -377,7 +376,7 @@ func handleSignAssignments(params map[string]interface{}) {
 	}
 
 	// sign tuples
-	assignments := bridge.ProtobufDecodeAssignmentList(params["assignments"].([]byte))
+	assignments := bridge.DecodeAssignmentList(params["assignments"].([]byte))
 	sigs := [][]byte{}
 	for _,assignment := range assignments {
 		byteAssignment := bridge.EncodeAssignment(&assignment)
@@ -385,8 +384,6 @@ func handleSignAssignments(params map[string]interface{}) {
 		sig := util.ElGamalSign(anonServer.Suite, rand, byteAssignment, anonServer.PrivateKey, anonServer.G)
 		sigs = append(sigs, sig)
 	}
-
-	fmt.Println(sigs)
 
 	// send signatures back to coordinator
 }

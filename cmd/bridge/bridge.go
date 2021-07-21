@@ -1,11 +1,9 @@
 package bridge
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
-	"log"
-	"encoding/gob"
+	// "log"
 
 	"reflect"
 	"github.com/dedis/crypto/nist"
@@ -112,46 +110,62 @@ func MessageOfPostBridge(params map[string]interface{}) []byte {
 // Encoder / Decoder
 // ****************************************************************************
 
-type AssignmentList struct {
-	Assignments []Assignment
+// type BytesList struct {
+// 	list [][]byte
+// }
+
+// func ProtobufEncodeBytesList(plist [][]byte) []byte {
+// 	bytes, err := protobuf.Encode(&BytesList{plist})
+// 	util.CheckErr(err)
+// 	return bytes
+// }
+
+// func ProtobufDecodeBytesList(bytes []byte) [][]byte {
+// 	var aList BytesList
+// 	var tList = reflect.TypeOf(&aList).Elem()
+// 	cons := protobuf.Constructors {
+// 		tList: func()interface{} { return []byte{} },
+// 	}
+
+// 	var 
+// }
+
+func EncodeAssignmentList(alist []Assignment) []byte {
+	var raw_list [][]byte
+	for _,assignment := range(alist) {
+		raw_list = append(raw_list, EncodeAssignment(&assignment))
+	}
+	return util.Encode2DByteArray(raw_list)
 }
 
-func ProtobufEncodeAssignmentList(plist []Assignment) []byte {
-	bytes, err := protobuf.Encode(&AssignmentList{plist})
-	util.CheckErr(err)
-	return bytes
-}
-
-func ProtobufDecodeAssignmentList(bytes []byte) []Assignment {
-	var aAssignment Assignment
-	var tAssignment = reflect.TypeOf(&aAssignment).Elem()
-	suite := nist.NewAES128SHA256QR512()
-	cons := protobuf.Constructors {
-		tAssignment: func()interface{} {
-			return Assignment{NymR: suite.Point(), Addr: "", Nym: suite.Point()}
-		},
+func DecodeAssignmentList(data []byte) (alist []Assignment) {
+	raw_list := util.Decode2DByteArray(data)
+	for _,raw_assignment := range(raw_list) {
+		alist = append(alist, *DecodeAssignment(raw_assignment))
 	}
-
-	var msg AssignmentList
-	if err := protobuf.DecodeWithConstructors(bytes, &msg, cons); err != nil {
-		log.Fatal(err)
-	}
-	return msg.Assignments
+	return
 }
 
 func EncodeAssignment(assignment *Assignment) []byte {
-	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-	err := encoder.Encode(assignment)
+	data, err := protobuf.Encode(assignment)
 	util.CheckErr(err)
-	return buf.Bytes()
+	return data
 }
 
 func DecodeAssignment(data []byte) *Assignment {
+	suite := nist.NewAES128SHA256QR512()
+	var aAssignment Assignment
+	tAssignment := reflect.TypeOf(&aAssignment).Elem()
+	var aPoint abstract.Point
+	tPoint := reflect.TypeOf(&aPoint).Elem()
+
+	cons := protobuf.Constructors {
+		tPoint: func()interface{} { return suite.Point() },
+		tAssignment: func()interface{} { return Assignment{} },
+	}
+
 	assignment := new(Assignment)
-	buf := bytes.NewReader(data)
-	decoder := gob.NewDecoder(buf)
-	err := decoder.Decode(assignment)
+	err := protobuf.DecodeWithConstructors(data, assignment, cons)
 	util.CheckErr(err)
 	return assignment
 }
