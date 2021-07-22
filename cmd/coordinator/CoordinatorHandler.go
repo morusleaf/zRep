@@ -29,7 +29,7 @@ func Handle(buf []byte, tmpCoordinator *Coordinator) {
 
 	switch event.EventType {
 	case proto.SERVER_REGISTER:
-		handleServerRegister(addr)
+		handleServerRegister(event.Params, addr)
 		break
 	case proto.UPDATE_PEDERSEN_H:
 		handleUpdatePedersenH(event.Params)
@@ -48,6 +48,9 @@ func Handle(buf []byte, tmpCoordinator *Coordinator) {
 		break
 	case proto.REQUEST_BRIDGES:
 		handleRequestBridges(event.Params, addr)
+		break
+	case proto.GOT_SIGNS:
+		handleGotSignatures(event.Params, addr)
 		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, addr)
@@ -114,8 +117,8 @@ func handleAnnouncement(params map[string]interface{}) {
 
 	// distribute g adn table to servers
 	// event = &proto.Event{EventType:proto.ANNOUNCEMENT_FINALIZE, Params:pm}
-	for _,addr := range anonCoordinator.ServerList {
-		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+	for _,server := range anonCoordinator.ServerList {
+		util.SendEvent(anonCoordinator.LocalAddr, server.Addr, event)
 	}
 
 	// set controller's new g
@@ -124,9 +127,13 @@ func handleAnnouncement(params map[string]interface{}) {
 }
 
 // handle server register request
-func handleServerRegister(addr *net.TCPAddr) {
+func handleServerRegister(params map[string]interface{}, addr *net.TCPAddr) {
 	fmt.Println("[debug] Receive the registration info from server " + addr.String());
-	lastServer := anonCoordinator.GetLastServer()
+	// fetch server's public key
+	publicKey := anonCoordinator.Suite.Point()
+	publicKey.UnmarshalBinary(params["public_key"].([]byte))
+
+	lastServer := anonCoordinator.GetLastServerAddr()
 
 	// link new server to the next_hop of last server
 	if lastServer != nil {
@@ -161,7 +168,7 @@ func handleServerRegister(addr *net.TCPAddr) {
 	event1 := &proto.Event{EventType:proto.SERVER_REGISTER_REPLY, Params:pm1}
 	util.SendEvent(anonCoordinator.LocalAddr, addr, event1)
 
-	anonCoordinator.AddServer(addr)
+	anonCoordinator.AddServer(addr, publicKey)
 }
 
 func handleUpdatePedersenH(params map[string]interface{}) {
@@ -184,7 +191,7 @@ func handleClientRegisterControllerSide(params map[string]interface{}, addr *net
 	util.CheckErr(err)
 
 	// send register info to the first server
-	firstServer := anonCoordinator.GetFirstServer()
+	firstServer := anonCoordinator.GetFirstServerAddr()
 	pm := map[string]interface{}{
 		"public_key": params["public_key"],
 		"addr": addr.String(),
@@ -222,6 +229,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 	var addrStr = params["addr"].(string)
 	addr, err := net.ResolveTCPAddr("tcp", addrStr)
 	util.CheckErr(err)
+	bytePublicKey, _ := anonCoordinator.PublicKey.MarshalBinary()
 	fujiokamBase := anonCoordinator.FujiOkamBase
 	pm := map[string]interface{}{
 		"n": fujiokamBase.N.Bytes(),
@@ -234,6 +242,7 @@ func handleClientRegisterServerSide(params map[string]interface{}) {
 		"h1": fujiokamBase.H1.ToBinary(),
 		"honesty_prf": util.ProtobufEncodeBigIntList(anonCoordinator.AllGnHonestyProofPublic),
 		// "h": byteHT,
+		"public_key": bytePublicKey,
 	}
 	event := &proto.Event{EventType:proto.CLIENT_REGISTER_CONFIRMATION, Params:pm}
 	util.SendEvent(anonCoordinator.LocalAddr, addr, event)
@@ -307,8 +316,32 @@ func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr
 		return
 	}
 
+	// record requester's IP
+	anonCoordinator.RequesterAddrs[nymR.String()] = senderAddr
+
 	// create assignment tuples from unused bridges
 	assignments := anonCoordinator.AssignBridges(ind, nymR)
+	// TODO: tell client
+	if len(assignments) == 0 {
+		return
+	}
+
+	// sign them using coordinator's private key
+	sigs := [][]byte{}
+	for _,assignment := range assignments {
+		byteAssignment := bridge.EncodeAssignment(&assignment)
+		sig := anonCoordinator.SignMessage(byteAssignment)
+		sigs = append(sigs, sig)
+	}
+
+	// create entries for these assignments, waiting for other servers' signatures
+	nServers := len(anonCoordinator.ServerList)
+	for i,assignment := range assignments {
+		brdgAddr := assignment.Addr
+		anonCoordinator.InitAssignmentSignatures(brdgAddr)
+		// append coordinator's own signature to the end
+		anonCoordinator.AddAssignmentSignature(brdgAddr, nServers, sigs[i])
+	}
 
 	pm := map[string]interface{}{
 		"assignments" : bridge.EncodeAssignmentList(assignments),
@@ -323,8 +356,56 @@ func handleRequestBridges(params map[string]interface{}, senderAddr *net.TCPAddr
 	}
 	event := &proto.Event{EventType:proto.SIGN_ASSIGNMENTS, Params:pm}
 	// send to all the servers
-	for _,addr := range anonCoordinator.ServerList {
-		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+	for _,server := range anonCoordinator.ServerList {
+		util.SendEvent(anonCoordinator.LocalAddr, server.Addr, event)
+	}
+}
+
+func handleGotSignatures(params map[string]interface{}, senderAddr *net.TCPAddr) {
+	isSuccess := params["success"].(bool)
+	if !isSuccess {
+		return
+	}
+
+	serverIndex := anonCoordinator.GetServerIndex(senderAddr)
+	if serverIndex < 0 {
+		fmt.Println("Warning: can not find server: ", senderAddr)
+		return
+	}
+
+	assignments := bridge.DecodeAssignmentList(params["assignments"].([]byte))
+	sigs := util.Decode2DByteArray(params["signatures"].([]byte))
+	nymR := assignments[0].NymR
+	requesterIP := anonCoordinator.RequesterAddrs[nymR.String()]
+
+	for i,assignment := range assignments {
+		sig := sigs[i]
+		brdgAddr := assignment.Addr
+		// update each assignment's log entry by inserting the signature and increase count
+		anonCoordinator.AddAssignmentSignature(brdgAddr, serverIndex, sig)
+
+		// if all servers have replied signatures for this assignment
+		if anonCoordinator.FinishCollectingAssignmentSignatures(brdgAddr) {
+			fmt.Println("[debug] collected all signatures for", brdgAddr)
+
+			// mark the bridge as used
+			info := anonCoordinator.Bridges[brdgAddr]
+			newInfo := BridgeInfo{Nym:info.Nym, Used:true}
+			anonCoordinator.Bridges[brdgAddr] = newInfo
+			
+			// send the signatures to the requester client
+			pm := map[string]interface{}{
+				"assignment": bridge.EncodeAssignment(&assignment),
+				"signatures": util.Encode2DByteArray(anonCoordinator.GetAssignmentSignatures(brdgAddr)),
+			}
+			// sign signatures
+			msg := bridge.MessageOfGotSignatures(pm)
+			byteSig := anonCoordinator.SignMessage(msg)
+			pm["signature"] = byteSig
+			// send
+			event := &proto.Event{EventType:proto.GOT_SIGNS, Params:pm}
+			util.SendEvent(anonCoordinator.LocalAddr, requesterIP, event)
+		}
 	}
 }
 
@@ -344,7 +425,7 @@ func handleMsg(params map[string]interface{}, addr *net.TCPAddr) {
 	byteText := []byte(text)
 	err = util.ElGamalVerify(anonCoordinator.Suite, byteText, nym, byteSig, anonCoordinator.G)
 	if err != nil {
-		fmt.Print("[note]** Fails to verify the message...")
+		fmt.Println("[note]** Fails to verify the message...")
 		return
 	}
 
@@ -411,8 +492,59 @@ func handleMsg(params map[string]interface{}, addr *net.TCPAddr) {
 	util.SendEvent(anonCoordinator.LocalAddr, addr, event1)
 }
 
+func handleVote(params map[string]interface{}, senderAddr *net.TCPAddr) {
+	// fetch nym
+	nym := anonCoordinator.Suite.Point()
+	err := nym.UnmarshalBinary(params["nym"].([]byte))
+	util.CheckErr(err)
+
+	// find client's public key
+	index := util.FindIndexWithinKeyList(anonCoordinator.AllClientsPublicKeys, nym)
+	if index < 0 {
+		fmt.Println("[note] Can not find nym within keyList")
+		return
+	}
+	publicKey := anonCoordinator.AllClientsPublicKeys[index]
+
+	// verify overall signature
+	byteSig := params["signature"].([]byte)
+	msg := bridge.MessageOfVote(params)
+	err = util.ElGamalVerify(anonCoordinator.Suite, msg, publicKey, byteSig, anonCoordinator.G)
+	if err != nil {
+		fmt.Println("[note] Fails to verify overall signature")
+		return
+	}
+
+	// verify each server's signature
+	signatures := util.Decode2DByteArray(params["signatures"].([]byte))
+	byteAssignment := params["assignment"].([]byte)
+	assignment := bridge.DecodeAssignment(byteAssignment)
+	numServers := len(anonCoordinator.ServerList)
+	for i := 0; i < numServers; i++ {
+		signature := signatures[i]
+		serverPublicKey := anonCoordinator.GetServerPublicKey(i)
+		err = util.ElGamalVerify(anonCoordinator.Suite, byteAssignment, serverPublicKey, signature, anonCoordinator.Suite.Point())
+		if err != nil {
+			fmt.Println("[note] Fails to verify server's signature")
+			return
+		}
+	}
+	// verify coordinator's own signature
+	err = util.ElGamalVerify(anonCoordinator.Suite, byteAssignment, anonCoordinator.PublicKey, signatures[numServers], anonCoordinator.Suite.Point())
+	if err != nil {
+		fmt.Println("[note] Fails to verify coordinator's signature")
+		return
+	}
+	fmt.Println("[debug] All servers' signatures check passed")
+
+	// record feedback
+	targetNym := assignment.Nym
+	feedback := params["feedback"].(int)
+	anonCoordinator.ReputationDiffMap[targetNym.String()] += feedback
+}
+
 // verify the vote and reply to client
-func handleVote(params map[string]interface{}, addr *net.TCPAddr) {
+func handleVote2(params map[string]interface{}, addr *net.TCPAddr) {
 	// get info from the request
 	text := params["text"].(string)
 	byteSig := params["signature"].([]byte)

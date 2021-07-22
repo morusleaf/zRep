@@ -65,17 +65,17 @@ But coordinator does not know the IP corresponding to nym.
 * The coordinator then
   + verify the signature using `nymR`,
   + verify the `prf` using all the information in the message,
-  + select `ind` number of bridges and their `nym`, forming `ind` number of *assignment* tuples `(nymR, nym, bridge)`,
+  + select `ind` number of bridges and their `nym`, forming `ind` number of *assignment* tuples `(nymR, nym, bridge)`, and marks these bridges as used,
   + broadcast to all servers the above tuples and `prf`.
 * Each server
   + verifies `prf`,
-  + then sign all tuples using its private key,
-  + then send these signatures back to the coordinator.
+  + then signs all tuples using its private key,
+  + then sends these signatures back to the coordinator.
   + if verification failed, it replies with failure.
 * After the coordinator received all servers' signatures,
   + it signs these tuples using its private key,
   + then sends these tuples and all signatures back to the client.
-  + Then it records these bridges for further voting, and marks these bridges as used.
+  + Then it records these bridges for further voting.
 
 ## Vote
 * Client sends to the coordinator a voting message of an assignment tuple, all related signatures, a feedback score (+1/-1) and a signature of this message,

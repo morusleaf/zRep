@@ -21,7 +21,6 @@ import (
 
 	"github.com/dedis/crypto/random"
 
-	// "fmt"
 	"zRep/primitive/fujiokam"
 	"zRep/primitive/pedersen_fujiokam"
 	"zRep/proto"

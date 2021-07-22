@@ -87,23 +87,41 @@ func VerifyInd(params map[string]interface{}, PCommr abstract.Point, suite abstr
 // Extract message body from package
 // ****************************************************************************
 
-func MessageOfRequestBridges(params map[string]interface{}) []byte {
+func MessageOfRequestBridges(params map[string]interface{}) (msg []byte) {
 	ind := params["ind"].(int)
 	byteInd := util.IntToByte(ind)
-	msg := append(byteInd, params["nym"].([]byte)...)
+	msg = append(msg, byteInd...)
+	msg = append(msg, params["nym"].([]byte)...)
 	msg = append(msg, params["FOCommd"].([]byte)...)
 	msg = append(msg, params["PCommd"].([]byte)...)
 	msg = append(msg, params["PCommind"].([]byte)...)
 	msg = append(msg, params["rind"].([]byte)...)
 	msg = append(msg, params["arg_nonneg"].([]byte)...)
 	msg = append(msg, params["arg_equal"].([]byte)...)
-	return msg
+	return
 }
 
-func MessageOfPostBridge(params map[string]interface{}) []byte {
+func MessageOfPostBridge(params map[string]interface{}) (msg []byte) {
 	bridgeAddr := params["bridge_addr"].(string)
-	msg := append([]byte(bridgeAddr), params["nym"].([]byte)...)
-	return msg
+	msg = append(msg, []byte(bridgeAddr)...)
+	msg = append(msg, params["nym"].([]byte)...)
+	return
+}
+
+func MessageOfGotSignatures(params map[string]interface{}) (msg []byte) {
+	msg = append(msg, params["assignment"].([]byte)...)
+	msg = append(msg, params["signatures"].([]byte)...)
+	return
+}
+
+func MessageOfVote(params map[string]interface{}) (msg []byte) {
+	msg = append(msg, params["nym"].([]byte)...)
+	msg = append(msg, params["assignment"].([]byte)...)
+	msg = append(msg, params["signatures"].([]byte)...)
+	feedback := params["feedback"].(int)
+	byteFeedback := big.NewInt(int64(feedback)).Bytes()
+	msg = append(msg, byteFeedback...)
+	return
 }
 
 // ****************************************************************************

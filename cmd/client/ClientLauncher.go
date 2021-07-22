@@ -203,7 +203,37 @@ func sendMsg(ind int, text string) {
 /**
   * send vote to server
   */
-func sendVote(msgID, vote int) {
+func sendVote(msgID, feedback int) {
+	// vote can be only 1 or -1
+	if feedback > 0 {
+		feedback = 1;
+	}else {
+		feedback = -1;
+	}
+	info := dissentClient.Assignments[msgID]
+	assignment := info.Assignment
+	byteSignatures := info.ByteSignatures
+	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
+
+	// pack message
+	params := map[string]interface{}{
+		"nym": byteNym,
+		"assignment": bridge.EncodeAssignment(assignment),
+		"signatures": byteSignatures,
+		"feedback": feedback,
+	}
+	msg := bridge.MessageOfVote(params)
+	// sign this message
+	rand := dissentClient.Suite.Cipher([]byte("example"))
+	sig := util.ElGamalSign(dissentClient.Suite, rand, msg, dissentClient.PrivateKey, dissentClient.G)
+
+	// send to coordinator
+	params["signature"] = sig
+	event := &proto.Event{EventType:proto.VOTE, Params:params}
+	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
+}
+
+func sendVote2(msgID, vote int) {
 	// vote can be only 1 or -1
 	if vote > 0 {
 		vote = 1;
@@ -251,6 +281,7 @@ func initClient() {
 		Suite: suite,
 		PrivateKey: a,
 		PublicKey: A,
+		ControllerPublicKey: suite.Point(),
 		OnetimePseudoNym: suite.Point(),
 		G: nil,
 		Reputation: bridge.StartingCredit,

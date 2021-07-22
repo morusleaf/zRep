@@ -1,14 +1,21 @@
 package client
+
 import (
-	"github.com/dedis/crypto/abstract"
+	"math/big"
 	"net"
+	"zRep/cmd/bridge"
 	"zRep/primitive/fujiokam"
 	"zRep/primitive/pedersen"
-	"math/big"
+
+	"github.com/dedis/crypto/abstract"
 )
 
-
 // data structure to store all the necessary data in client
+
+type AssignmentInfo struct {
+	Assignment *bridge.Assignment
+	ByteSignatures []byte
+}
 
 type DissentClient struct {
 	// client-side config
@@ -20,11 +27,13 @@ type DissentClient struct {
 	Suite abstract.Suite
 	PrivateKey abstract.Secret
 	PublicKey abstract.Point
+	ControllerPublicKey abstract.Point
 	OnetimePseudoNym abstract.Point
 	G abstract.Point
 	Reputation int
 	AllClientsPublicKeys []abstract.Point
 	Index int
+	Assignments []AssignmentInfo
 
 	PCommr abstract.Point
 	R abstract.Secret
@@ -32,4 +41,13 @@ type DissentClient struct {
 	PedersenBase *pedersen.PedersenBase
 	AllGnHonestyProofPublic []*big.Int
 	AllGnHonestyChallenge []bool
+}
+
+func (dissentClient *DissentClient) ClearBuffer() {
+	dissentClient.Assignments = nil
+}
+
+func (dissentClient *DissentClient) AddAssignment(assignment *bridge.Assignment, byteSignatures []byte) {
+	info := AssignmentInfo{Assignment: assignment, ByteSignatures: byteSignatures}
+	dissentClient.Assignments = append(dissentClient.Assignments, info)
 }

@@ -7,6 +7,7 @@ import (
 	"zRep/primitive/lrs"
 	"zRep/primitive/pedersen"
 	"zRep/cmd/bridge"
+	"zRep/util"
 
 	"github.com/dedis/crypto/abstract"
 )
@@ -21,11 +22,21 @@ type BridgeInfo struct {
 	Used bool
 }
 
+type AssignmentSignatures struct {
+	Signatures [][]byte
+	Count int
+}
+
+type ServerInfo struct {
+	Addr *net.TCPAddr
+	PublicKey abstract.Point
+}
+
 type Coordinator struct {
 	// local address
 	LocalAddr *net.TCPAddr
 	// network topology for server cluster
-	ServerList []*net.TCPAddr
+	ServerList []ServerInfo
 	// initialize the controller status
 	Status int
 
@@ -50,7 +61,10 @@ type Coordinator struct {
 	NewClientsBuffer []ClientTuple
 	// msg sender's record nym
 	MsgLog []abstract.Point
+	// map an assignment's bridge to servers' signatures
+	AssignmentSignaturesLog map[string]AssignmentSignatures
 	// record each vote signature's y0
+	RequesterAddrs map[string]*net.TCPAddr
 	VoteRecords []*big.Int
 
 	Bridges map[string]BridgeInfo
@@ -70,19 +84,19 @@ type Coordinator struct {
 }
 
 // get last server in topology
-func (c *Coordinator) GetLastServer() *net.TCPAddr {
+func (c *Coordinator) GetLastServerAddr() *net.TCPAddr {
 	if len(c.ServerList) == 0 {
 		return nil
 	}
-	return c.ServerList[len(c.ServerList)-1]
+	return c.ServerList[len(c.ServerList)-1].Addr
 }
 
 // get first server in topology
-func (c *Coordinator) GetFirstServer() *net.TCPAddr {
+func (c *Coordinator) GetFirstServerAddr() *net.TCPAddr {
 	if len(c.ServerList) == 0 {
 		return nil
 	}
-	return c.ServerList[0]
+	return c.ServerList[0].Addr
 }
 
 func (c *Coordinator) AddClient(key abstract.Point, val *net.TCPAddr) {
@@ -97,8 +111,29 @@ func (c *Coordinator) AddClient(key abstract.Point, val *net.TCPAddr) {
 }
 
 // add server into topology
-func (c *Coordinator) AddServer(addr *net.TCPAddr){
-	c.ServerList = append(c.ServerList,addr)
+func (c *Coordinator) AddServer(addr *net.TCPAddr, publicKey abstract.Point){
+	server := ServerInfo{Addr:addr, PublicKey: publicKey}
+	c.ServerList = append(c.ServerList, server)
+}
+
+func (c *Coordinator) GetServerPublicKey(index int) abstract.Point {
+	return c.ServerList[index].PublicKey
+}
+
+func (c *Coordinator) GetServerIndex(serverAddr *net.TCPAddr) int {
+	for i,server := range c.ServerList {
+		addr := server.Addr
+		if addr.IP.Equal(serverAddr.IP) && addr.Port == serverAddr.Port {
+			return i
+		}
+	}
+	return -1
+}
+
+func (c *Coordinator) SignMessage(msg []byte) []byte {
+	rand := c.Suite.Cipher([]byte("example"))
+	sig := util.ElGamalSign(c.Suite, rand, msg, c.PrivateKey, c.Suite.Point())
+	return sig
 }
 
 // add msg log and return msg id
@@ -107,14 +142,43 @@ func (c *Coordinator) AddMsgLog(log abstract.Point) int{
 	return len(c.MsgLog)
 }
 
+// create an empty entry to store all servers' signatures for a bridge
+func (c *Coordinator) InitAssignmentSignatures(brdgAddr string) {
+	nServers := len(c.ServerList)
+	assignmentSigs := make([][]byte, nServers+1)
+	entry := AssignmentSignatures{Signatures: assignmentSigs, Count: 0}
+	anonCoordinator.AssignmentSignaturesLog[brdgAddr] = entry
+}
+
+// insert a server's signature for a bridge into the log
+func (c *Coordinator) AddAssignmentSignature(brdgAddr string, serverIndex int, sig []byte) {
+	oldEntry := c.AssignmentSignaturesLog[brdgAddr]
+	assignmentSigs := oldEntry.Signatures
+	assignmentSigs[serverIndex] = sig
+	newEntry := AssignmentSignatures{Signatures: assignmentSigs, Count: oldEntry.Count + 1}
+	c.AssignmentSignaturesLog[brdgAddr] = newEntry
+}
+
+func (c *Coordinator) FinishCollectingAssignmentSignatures(brdgAddr string) bool {
+	nServers := len(c.ServerList)
+	return c.AssignmentSignaturesLog[brdgAddr].Count == nServers + 1
+}
+
+func (c *Coordinator) GetAssignmentSignatures(brdgAddr string) [][]byte {
+	return c.AssignmentSignaturesLog[brdgAddr].Signatures
+}
+
 func (c *Coordinator) AddBridge(bridgeAddr string, nym abstract.Point) {
 	c.Bridges[bridgeAddr] = BridgeInfo{Nym:nym, Used:false}
 }
 
-func (c *Coordinator) GetBridge() *bridge.Bridge {
+func (c *Coordinator) GetBridge() (res *bridge.Bridge) {
 	for bridgeAddr,info := range c.Bridges {
 		if !info.Used {
-			return &bridge.Bridge{Addr:bridgeAddr, Nym:info.Nym}
+			res = &bridge.Bridge{Addr:bridgeAddr, Nym:info.Nym}
+			// mark the bridge as used
+			c.Bridges[bridgeAddr] = BridgeInfo{Nym:info.Nym, Used:true}
+			return
 		}
 	}
 	return nil

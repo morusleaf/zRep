@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"zRep/cmd/bridge"
 	"zRep/primitive/fujiokam"
 	"zRep/proto"
 	"zRep/util"
@@ -26,6 +27,9 @@ func Handle(buf []byte, dissentClient *DissentClient) {
 	case proto.ANNOUNCEMENT_FINALIZE:
 		handleAnnouncementFinalize(event.Params, dissentClient)
 		break
+	case proto.GOT_SIGNS:
+		handleGotSignatures(event.Params, dissentClient)
+		break
 	case proto.MESSAGE:
 		handleMsg(event.Params, dissentClient)
 		break
@@ -43,7 +47,7 @@ func Handle(buf []byte, dissentClient *DissentClient) {
 		break
 	case proto.MSG_REPLY:
 		handleMsgReply(event.Params)
-		break;
+		break
 	default:
 		fmt.Println("Unrecognized request")
 		break
@@ -67,6 +71,10 @@ func handleRegisterConfirmation(params map[string]interface{}, dissentClient *Di
 	base.H1 = base.Point().FromBinary(params["h1"].([]byte))
 	dissentClient.FujiOkamBase = base
 	dissentClient.AllGnHonestyProofPublic = util.ProtobufDecodeBigIntList(params["honesty_prf"].([]byte))
+
+	// Controller's public key
+	err := dissentClient.ControllerPublicKey.UnmarshalBinary(params["public_key"].([]byte))
+	util.CheckErr(err)
 
 	// Pedersen
 	// var HT = dissentClient.Suite.Point()
@@ -110,7 +118,10 @@ func handleVotePhaseStart(dissentClient *DissentClient) {
 	}
 	fmt.Println()
 	// print out info in client side
-	fmt.Println("[client] Voting Phase begins.(cmd: vote <msg_id> (+-)1)")
+	for i,info := range dissentClient.Assignments {
+		fmt.Printf("[%d] %s\n", i, info.Assignment.Addr)
+	}
+	fmt.Println("[client] Voting Phase begins.(cmd: vote <bridge_id> (+-)1)")
 	fmt.Print("cmd >> ")
 }
 
@@ -123,6 +134,8 @@ func handleRoundEnd(params map[string]interface{}, dissentClient *DissentClient)
 	myDiff := util.FindIntUsingKeyList(keyList, diffList, dissentClient.OnetimePseudoNym)
 	dissentClient.Reputation += myDiff
 	fmt.Println("my new reputation:", dissentClient.Reputation)
+
+	dissentClient.ClearBuffer()
 
 	fmt.Println()
 	fmt.Println("[client] Round ended. Waiting for new round start...");
@@ -228,4 +241,21 @@ func handleMsg(params map[string]interface{}, dissentClient *DissentClient) {
 	fmt.Println("Message Text: " + text);
 	fmt.Println();
 	fmt.Print("cmd >> ")
+}
+
+func handleGotSignatures(params map[string]interface{}, dissentClient *DissentClient) {
+	// verify signature
+	byteSig := params["signature"].([]byte)
+	msg := bridge.MessageOfGotSignatures(params)
+	err := util.ElGamalVerify(dissentClient.Suite, msg, dissentClient.ControllerPublicKey, byteSig, dissentClient.Suite.Point())
+	if err != nil {
+		fmt.Println("[note]** Fails to verify the signatures")
+		return
+	}
+
+	// record assignment and its signatures
+	assignment := bridge.DecodeAssignment(params["assignment"].([]byte))
+	byteSignatures := params["signatures"].([]byte)
+	dissentClient.AddAssignment(assignment, byteSignatures)
+	fmt.Println("Got bridge", assignment.Addr)
 }

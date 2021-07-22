@@ -26,7 +26,10 @@ var config map[string]string
   */
 func serverRegister() {
 	// set the parameters to register
-	params := map[string]interface{}{}
+	bytePublicKey, _ := anonServer.PublicKey.MarshalBinary()
+	params := map[string]interface{}{
+		"public_key": bytePublicKey,
+	}
 	event := &proto.Event{EventType:proto.SERVER_REGISTER, Params:params}
 
 	util.SendEvent(anonServer.LocalAddr, anonServer.CoordinatorAddr, event)

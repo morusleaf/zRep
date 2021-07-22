@@ -48,5 +48,7 @@ const POST_BRIDGE = 21
 const REQUEST_BRIDGES = 22
 // coordinator ask other servers to sign bridge assignments
 const SIGN_ASSIGNMENTS = 23
+// servers sends back signatures for assignments
+const GOT_SIGNS = 24
 
-const ANNOUNCEMENT_FINALIZE = 24
+const ANNOUNCEMENT_FINALIZE = 25

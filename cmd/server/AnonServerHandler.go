@@ -37,7 +37,7 @@ func Handle(buf []byte, tmpServer *AnonServer) {
 		handleAnnouncementFinalize(event.Params)
 		break
 	case proto.SIGN_ASSIGNMENTS:
-		handleSignAssignments(event.Params)
+		handleSignAssignments(event.Params, addr)
 		break
 	case proto.UPDATE_NEXT_HOP:
 		handleUpdateNextHop(event.Params)
@@ -361,7 +361,7 @@ func handleAnnouncementFinalize(params map[string]interface{}) {
 	anonServer.G = g
 }
 
-func handleSignAssignments(params map[string]interface{}) {
+func handleSignAssignments(params map[string]interface{}, senderAddr *net.TCPAddr) {
 	// extract info from params
 	nymR := anonServer.Suite.Point()
 	byteNymR := params["nym"].([]byte)
@@ -372,20 +372,33 @@ func handleSignAssignments(params map[string]interface{}) {
 	// verify the proof
 	if !bridge.VerifyInd(params, PCommr, anonServer.Suite, anonServer.PedersenBase, anonServer.FujiOkamBase) {
 		fmt.Print("[note]** Fails to verify the proof...")
+		pm := map[string]interface{}{
+			"success": false,
+		}
+		event := &proto.Event{EventType:proto.GOT_SIGNS, Params:pm}
+		util.SendEvent(anonServer.LocalAddr, senderAddr, event)
 		return
 	}
 
-	// sign tuples
+	// sign assignments
 	assignments := bridge.DecodeAssignmentList(params["assignments"].([]byte))
 	sigs := [][]byte{}
 	for _,assignment := range assignments {
 		byteAssignment := bridge.EncodeAssignment(&assignment)
 		rand := anonServer.Suite.Cipher([]byte("example"))
-		sig := util.ElGamalSign(anonServer.Suite, rand, byteAssignment, anonServer.PrivateKey, anonServer.G)
+		sig := util.ElGamalSign(anonServer.Suite, rand, byteAssignment, anonServer.PrivateKey, anonServer.Suite.Point())
 		sigs = append(sigs, sig)
 	}
 
 	// send signatures back to coordinator
+	byteSigs := util.Encode2DByteArray(sigs)
+	pm := map[string]interface{}{
+		"success": true,
+		"assignments": params["assignments"],
+		"signatures": byteSigs,
+	}
+	event := &proto.Event{EventType:proto.GOT_SIGNS, Params:pm}
+	util.SendEvent(anonServer.LocalAddr, senderAddr, event)
 }
 
 // handle server register reply

@@ -66,6 +66,7 @@ func initCoordinator() {
 		BeginningCommMap: make(map[string]abstract.Point),
 		NewClientsBuffer: nil,
 		MsgLog: nil,
+		AssignmentSignaturesLog: make(map[string]AssignmentSignatures),
 		Bridges: make(map[string]BridgeInfo),
 		EndingCommMap: make(map[string]abstract.Point),
 		EndingKeyMap: make(map[string]abstract.Point),
@@ -89,7 +90,7 @@ func configCommParams() {
 	}
 	event := &proto.Event{EventType: proto.BCAST_PEDERSEN_H, Params: params}
 	for _, server := range anonCoordinator.ServerList {
-		util.SendEvent(anonCoordinator.LocalAddr, server, event)
+		util.SendEvent(anonCoordinator.LocalAddr, server.Addr, event)
 	}
 }
 
@@ -101,6 +102,7 @@ func clearBuffer() {
 	anonCoordinator.NewClientsBuffer = nil
 	// msg sender's record nym
 	anonCoordinator.MsgLog = nil
+	anonCoordinator.RequesterAddrs = make(map[string]*net.TCPAddr)
 }
 
 /**
@@ -108,7 +110,7 @@ func clearBuffer() {
   * send reputation list
   */
 func announce() {
-	firstServer := anonCoordinator.GetFirstServer()
+	firstServer := anonCoordinator.GetFirstServerAddr()
 	if firstServer == nil {
 		anonCoordinator.Status = MESSAGE
 		return
@@ -140,7 +142,7 @@ func announce() {
  * add new clients into the reputation map
  */
 func roundEnd() {
-	lastServer := anonCoordinator.GetLastServer()
+	lastServer := anonCoordinator.GetLastServerAddr()
 	if lastServer == nil {
 		anonCoordinator.Status = READY_FOR_NEW_ROUND
 		return
