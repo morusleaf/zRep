@@ -2,14 +2,14 @@ package coordinator
 
 import (
 	"fmt"
-	"math/big"
+	// "math/big"
 	"net"
 	"strconv"
-	"strings"
+	// "strings"
 	"time"
 
 	"zRep/primitive/lrs"
-	"zRep/primitive/pedersen_fujiokam"
+	// "zRep/primitive/pedersen_fujiokam"
 	"zRep/proto"
 	"zRep/util"
 	"zRep/cmd/bridge"
@@ -52,9 +52,9 @@ func Handle(buf []byte, tmpCoordinator *Coordinator) {
 	case proto.GOT_SIGNS:
 		handleGotSignatures(event.Params, addr)
 		break
-	case proto.MESSAGE:
-		handleMsg(event.Params, addr)
-		break
+	// case proto.MESSAGE:
+	// 	handleMsg(event.Params, addr)
+	// 	break
 	case proto.VOTE:
 		handleVote(event.Params, addr)
 		break
@@ -410,87 +410,87 @@ func handleGotSignatures(params map[string]interface{}, senderAddr *net.TCPAddr)
 }
 
 // verify the msg and broadcast to clients
-func handleMsg(params map[string]interface{}, addr *net.TCPAddr) {
-	// extract info from params
-	text := params["text"].(string)
-	byteSig := params["signature"].([]byte)
-	nym := anonCoordinator.Suite.Point()
-	byteNym := params["nym"].([]byte)
-	err := nym.UnmarshalBinary(byteNym)
-	util.CheckErr(err)
+// func handleMsg(params map[string]interface{}, addr *net.TCPAddr) {
+// 	// extract info from params
+// 	text := params["text"].(string)
+// 	byteSig := params["signature"].([]byte)
+// 	nym := anonCoordinator.Suite.Point()
+// 	byteNym := params["nym"].([]byte)
+// 	err := nym.UnmarshalBinary(byteNym)
+// 	util.CheckErr(err)
 
-	fmt.Println("[debug] Receiving msg from " + addr.String() + ": " + text)
+// 	fmt.Println("[debug] Receiving msg from " + addr.String() + ": " + text)
 
-	// verify the identification of the client
-	byteText := []byte(text)
-	err = util.ElGamalVerify(anonCoordinator.Suite, byteText, nym, byteSig, anonCoordinator.G)
-	if err != nil {
-		fmt.Println("[note]** Fails to verify the message...")
-		return
-	}
+// 	// verify the identification of the client
+// 	byteText := []byte(text)
+// 	err = util.ElGamalVerify(anonCoordinator.Suite, byteText, nym, byteSig, anonCoordinator.G)
+// 	if err != nil {
+// 		fmt.Println("[note]** Fails to verify the message...")
+// 		return
+// 	}
 
-	// PComm for d
-	PCommind := anonCoordinator.Suite.Point()
-	err = PCommind.UnmarshalBinary(params["PCommind"].([]byte))
-	util.CheckErr(err)
-	PCommd := anonCoordinator.Suite.Point()
-	err = PCommd.UnmarshalBinary(params["PCommd"].([]byte))
-	util.CheckErr(err)
-	pedersenBase := anonCoordinator.PedersenBase
-	PCommr := anonCoordinator.EndingCommMap[nym.String()]
-	myPCommd := pedersenBase.Sub(PCommr, PCommind)
-	if !PCommd.Equal(myPCommd) {
-		fmt.Println("[note]** PCommd != PCoomind^-1 * PCommr (mod p)")
-		return
-	}
-	fmt.Println("[debug] PComm check passed")
+// 	// PComm for d
+// 	PCommind := anonCoordinator.Suite.Point()
+// 	err = PCommind.UnmarshalBinary(params["PCommind"].([]byte))
+// 	util.CheckErr(err)
+// 	PCommd := anonCoordinator.Suite.Point()
+// 	err = PCommd.UnmarshalBinary(params["PCommd"].([]byte))
+// 	util.CheckErr(err)
+// 	pedersenBase := anonCoordinator.PedersenBase
+// 	PCommr := anonCoordinator.EndingCommMap[nym.String()]
+// 	myPCommd := pedersenBase.Sub(PCommr, PCommind)
+// 	if !PCommd.Equal(myPCommd) {
+// 		fmt.Println("[note]** PCommd != PCoomind^-1 * PCommr (mod p)")
+// 		return
+// 	}
+// 	fmt.Println("[debug] PComm check passed")
 
-	// FOComm for d
-	fujiokamBase := anonCoordinator.FujiOkamBase
-	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
-	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
-	FOCommd := fujiokamBase.Point().SetBigInt(FOCommdV)
-	if res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg); res != true {
-		fmt.Println("[note]** Non-negative verification failed")
-		return
-	}
-	fmt.Println("[debug] Non-negative check passed")
+// 	// FOComm for d
+// 	fujiokamBase := anonCoordinator.FujiOkamBase
+// 	FOCommdV := new(big.Int).SetBytes(params["FOCommd"].([]byte))
+// 	ARGnonneg := util.DecodeARGnonneg(params["arg_nonneg"].([]byte))
+// 	FOCommd := fujiokamBase.Point().SetBigInt(FOCommdV)
+// 	if res := fujiokamBase.VerifyNonneg(FOCommd, ARGnonneg); res != true {
+// 		fmt.Println("[note]** Non-negative verification failed")
+// 		return
+// 	}
+// 	fmt.Println("[debug] Non-negative check passed")
 
-	// POComm for d
-	ARGequal := util.DecodeARGequal(params["arg_equal"].([]byte))
-	if res := pedersen_fujiokam.VerifyEqual(pedersenBase, fujiokamBase, PCommd, FOCommd, ARGequal); res != true {
-		fmt.Println("[note]** Equality verification failed")
-		return
-	}
-	fmt.Println("[debug] Equality check passed")
+// 	// POComm for d
+// 	ARGequal := util.DecodeARGequal(params["arg_equal"].([]byte))
+// 	if res := pedersen_fujiokam.VerifyEqual(pedersenBase, fujiokamBase, PCommd, FOCommd, ARGequal); res != true {
+// 		fmt.Println("[note]** Equality verification failed")
+// 		return
+// 	}
+// 	fmt.Println("[debug] Equality check passed")
 
 
-	// add msg log
-	msgID := anonCoordinator.AddMsgLog(nym)
+// 	// add msg log
+// 	msgID := anonCoordinator.AddMsgLog(nym)
 
-	// generate msg to clients
-	// rep := anonCoordinator.GetReputation(nym)
-	// byteRep, err := rep.MarshalBinary()
-	// util.CheckErr(err)
-	pm := map[string]interface{}{
-		"text" : text,
-		"nym" : params["nym"].([]byte),
-		// "rep" : byteRep,
-		"msgID" : msgID,
-	}
-	event := &proto.Event{EventType:proto.MESSAGE, Params:pm}
+// 	// generate msg to clients
+// 	// rep := anonCoordinator.GetReputation(nym)
+// 	// byteRep, err := rep.MarshalBinary()
+// 	// util.CheckErr(err)
+// 	pm := map[string]interface{}{
+// 		"text" : text,
+// 		"nym" : params["nym"].([]byte),
+// 		// "rep" : byteRep,
+// 		"msgID" : msgID,
+// 	}
+// 	event := &proto.Event{EventType:proto.MESSAGE, Params:pm}
 
-	// send to all the clients
-	for _,addr := range anonCoordinator.Clients {
-		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
-	}
-	// send confirmation to msg sender
-	pmMsg := map[string]interface{}{
-		"reply" : true,
-	}
-	event1 := &proto.Event{EventType:proto.MSG_REPLY, Params:pmMsg}
-	util.SendEvent(anonCoordinator.LocalAddr, addr, event1)
-}
+// 	// send to all the clients
+// 	for _,addr := range anonCoordinator.Clients {
+// 		util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+// 	}
+// 	// send confirmation to msg sender
+// 	pmMsg := map[string]interface{}{
+// 		"reply" : true,
+// 	}
+// 	event1 := &proto.Event{EventType:proto.MSG_REPLY, Params:pmMsg}
+// 	util.SendEvent(anonCoordinator.LocalAddr, addr, event1)
+// }
 
 func handleVote(params map[string]interface{}, senderAddr *net.TCPAddr) {
 	// fetch nym
@@ -544,59 +544,59 @@ func handleVote(params map[string]interface{}, senderAddr *net.TCPAddr) {
 }
 
 // verify the vote and reply to client
-func handleVote2(params map[string]interface{}, addr *net.TCPAddr) {
-	// get info from the request
-	text := params["text"].(string)
-	byteSig := params["signature"].([]byte)
-	nym := anonCoordinator.Suite.Point()
-	byteNym := params["nym"].([]byte)
-	err := nym.UnmarshalBinary(byteNym)
-	util.CheckErr(err)
-	// get msg id and vote
-	commands := strings.Split(text,";")
-	// modify the reputation
-	msgID, _ := strconv.Atoi(commands[0])
-	vote, _ := strconv.Atoi(commands[1])
+// func handleVote2(params map[string]interface{}, addr *net.TCPAddr) {
+// 	// get info from the request
+// 	text := params["text"].(string)
+// 	byteSig := params["signature"].([]byte)
+// 	nym := anonCoordinator.Suite.Point()
+// 	byteNym := params["nym"].([]byte)
+// 	err := nym.UnmarshalBinary(byteNym)
+// 	util.CheckErr(err)
+// 	// get msg id and vote
+// 	commands := strings.Split(text,";")
+// 	// modify the reputation
+// 	msgID, _ := strconv.Atoi(commands[0])
+// 	vote, _ := strconv.Atoi(commands[1])
 
-	fmt.Println("[debug] Receiving vote from " + addr.String() + ": " + text)
+// 	fmt.Println("[debug] Receiving vote from " + addr.String() + ": " + text)
 
-	// verify the identification of the client
-	index := util.FindIndexWithinKeyList(anonCoordinator.AllClientsPublicKeys, nym)
-	if index < 0 {
-		fmt.Println("[note] Can not find nym within keyList")
-		return
-	}
-	sig := lrs.ProtobufDecodeSignature(byteSig)
-	res := anonCoordinator.LRSBase.Verify(util.IntToByte(msgID), len(anonCoordinator.AllClientsPublicKeys), index, sig, anonCoordinator.AllClientsPublicKeys)
-	var pm map[string]interface{}
-	if res == false {
-		fmt.Println("[coordinator]** Fails to verify signature...")
-		pm = map[string]interface{}{
-			"reply" : false,
-		}
-	}else if anonCoordinator.IsLinkableRecord(sig.Y0) {
-		fmt.Println("[coordinator]** Signature implies duplicate vote...")
-		pm = map[string]interface{}{
-			"reply" : false,
-		}
-	}else {
-		fmt.Println("[debug] Linkable ring signature verification passed")
-		// record vote
-		anonCoordinator.AddToVoteRecords(sig.Y0)
+// 	// verify the identification of the client
+// 	index := util.FindIndexWithinKeyList(anonCoordinator.AllClientsPublicKeys, nym)
+// 	if index < 0 {
+// 		fmt.Println("[note] Can not find nym within keyList")
+// 		return
+// 	}
+// 	sig := lrs.ProtobufDecodeSignature(byteSig)
+// 	res := anonCoordinator.LRSBase.Verify(util.IntToByte(msgID), len(anonCoordinator.AllClientsPublicKeys), index, sig, anonCoordinator.AllClientsPublicKeys)
+// 	var pm map[string]interface{}
+// 	if res == false {
+// 		fmt.Println("[coordinator]** Fails to verify signature...")
+// 		pm = map[string]interface{}{
+// 			"reply" : false,
+// 		}
+// 	}else if anonCoordinator.IsLinkableRecord(sig.Y0) {
+// 		fmt.Println("[coordinator]** Signature implies duplicate vote...")
+// 		pm = map[string]interface{}{
+// 			"reply" : false,
+// 		}
+// 	}else {
+// 		fmt.Println("[debug] Linkable ring signature verification passed")
+// 		// record vote
+// 		anonCoordinator.AddToVoteRecords(sig.Y0)
 
-		targetNym := anonCoordinator.MsgLog[msgID-1]
+// 		targetNym := anonCoordinator.MsgLog[msgID-1]
 
-		anonCoordinator.ReputationDiffMap[targetNym.String()] += vote
-		// generate reply msg to client
-		pm = map[string]interface{}{
-			"reply" : true,
-		}
-	}
+// 		anonCoordinator.ReputationDiffMap[targetNym.String()] += vote
+// 		// generate reply msg to client
+// 		pm = map[string]interface{}{
+// 			"reply" : true,
+// 		}
+// 	}
 
-	event := &proto.Event{EventType:proto.VOTE_REPLY, Params:pm}
-	// send reply to the client
-	util.SendEvent(anonCoordinator.LocalAddr, addr, event)
-}
+// 	event := &proto.Event{EventType:proto.VOTE_REPLY, Params:pm}
+// 	// send reply to the client
+// 	util.SendEvent(anonCoordinator.LocalAddr, addr, event)
+// }
 
 // Handler for ROUND_END event
 // send user round end notification

@@ -148,57 +148,57 @@ func requestBridges(ind int) {
 /**
   * send message text to server
   */
-func sendMsg(ind int, text string) {
-	if ind > dissentClient.Reputation {
-		fmt.Println("indicator should be less or equal than reputation")
-		return
-	}
-	d := dissentClient.Reputation - ind
-	bigD := new(big.Int).SetInt64(int64(d))
-	xD := dissentClient.Suite.Secret().SetInt64(int64(d))
+// func sendMsg(ind int, text string) {
+// 	if ind > dissentClient.Reputation {
+// 		fmt.Println("indicator should be less or equal than reputation")
+// 		return
+// 	}
+// 	d := dissentClient.Reputation - ind
+// 	bigD := new(big.Int).SetInt64(int64(d))
+// 	xD := dissentClient.Suite.Secret().SetInt64(int64(d))
 
-	// compute PComm for d
-	PCommr := dissentClient.PCommr
-	xind := dissentClient.Suite.Secret().SetInt64(int64(ind))
-	PCommind, rind := dissentClient.PedersenBase.Commit(xind)
-	PCommd := dissentClient.PedersenBase.Sub(PCommr, PCommind)
-	bytePCommind, err := PCommind.MarshalBinary()
-	util.CheckErr(err)
-	bytePCommd, err := PCommd.MarshalBinary()
-	util.CheckErr(err)
-	byteRind, err := rind.MarshalBinary()
-	util.CheckErr(err)
+// 	// compute PComm for d
+// 	PCommr := dissentClient.PCommr
+// 	xind := dissentClient.Suite.Secret().SetInt64(int64(ind))
+// 	PCommind, rind := dissentClient.PedersenBase.Commit(xind)
+// 	PCommd := dissentClient.PedersenBase.Sub(PCommr, PCommind)
+// 	bytePCommind, err := PCommind.MarshalBinary()
+// 	util.CheckErr(err)
+// 	bytePCommd, err := PCommd.MarshalBinary()
+// 	util.CheckErr(err)
+// 	byteRind, err := rind.MarshalBinary()
+// 	util.CheckErr(err)
 
-	// generate ARGnonneg
-	FOCommd, rFOCommd := dissentClient.FujiOkamBase.Commit(bigD)
-	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFOCommd)
+// 	// generate ARGnonneg
+// 	FOCommd, rFOCommd := dissentClient.FujiOkamBase.Commit(bigD)
+// 	ARGnonneg := dissentClient.FujiOkamBase.ProveNonneg(bigD, FOCommd, rFOCommd)
 
-	// generate ARGequal
-	rd := dissentClient.Suite.Secret().Sub(dissentClient.R, rind)
-	ARGequal := pedersen_fujiokam.ProveEqual(dissentClient.PedersenBase, dissentClient.FujiOkamBase, xD, PCommd, rd, FOCommd, rFOCommd)
+// 	// generate ARGequal
+// 	rd := dissentClient.Suite.Secret().Sub(dissentClient.R, rind)
+// 	ARGequal := pedersen_fujiokam.ProveEqual(dissentClient.PedersenBase, dissentClient.FujiOkamBase, xD, PCommd, rd, FOCommd, rFOCommd)
 
-	// generate signature
-	rand := dissentClient.Suite.Cipher([]byte("example"))
-	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
-	// serialize Point data structure
-	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
+// 	// generate signature
+// 	rand := dissentClient.Suite.Cipher([]byte("example"))
+// 	sig := util.ElGamalSign(dissentClient.Suite, rand, []byte(text), dissentClient.PrivateKey, dissentClient.G)
+// 	// serialize Point data structure
+// 	byteNym, _ := dissentClient.OnetimePseudoNym.MarshalBinary()
 
-	// wrap params
-	params := map[string]interface{}{
-		"text": text,
-		"nym": byteNym,
-		"signature": sig,
-		"FOCommd": FOCommd.ToBinary(),
-		"PCommd": bytePCommd,
-		"PCommind": bytePCommind,
-		"rind": byteRind,
-		"arg_nonneg": util.EncodeARGnonneg(ARGnonneg),
-		"arg_equal": util.EncodeARGequal(ARGequal),
-	}
-	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
-	// send to coordinator
-	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
-}
+// 	// wrap params
+// 	params := map[string]interface{}{
+// 		"text": text,
+// 		"nym": byteNym,
+// 		"signature": sig,
+// 		"FOCommd": FOCommd.ToBinary(),
+// 		"PCommd": bytePCommd,
+// 		"PCommind": bytePCommind,
+// 		"rind": byteRind,
+// 		"arg_nonneg": util.EncodeARGnonneg(ARGnonneg),
+// 		"arg_equal": util.EncodeARGequal(ARGequal),
+// 	}
+// 	event := &proto.Event{EventType:proto.MESSAGE, Params:params}
+// 	// send to coordinator
+// 	util.SendEvent(dissentClient.LocalAddr, dissentClient.CoordinatorAddr, event)
+// }
 
 /**
   * send vote to server
@@ -322,10 +322,10 @@ func Launch() {
 		command := string(data)
 		commands := strings.Split(command, " ")
 		switch commands[0] {
-		case "msg":
-			ind,_ := strconv.Atoi(commands[1])
-			sendMsg(ind, commands[2])
-			break
+		// case "msg":
+		// 	ind,_ := strconv.Atoi(commands[1])
+		// 	sendMsg(ind, commands[2])
+		// 	break
 		case "vote":
 			msgID,_ := strconv.Atoi(commands[1])
 			vote, _ := strconv.Atoi(commands[2])

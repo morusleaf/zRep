@@ -15,13 +15,13 @@ const CLIENT_REGISTER_SERVERSIDE = 5
 // confirmation for successfully registering client
 const CLIENT_REGISTER_CONFIRMATION = 6
 // add a new client
-const ADD_NEWCLIENT = 7
+// const ADD_NEWCLIENT = 7
 // announce phase event
 const ANNOUNCEMENT = 8
 // synchronize reputation map among servers
-const SYNC_REPMAP = 9
+// const SYNC_REPMAP = 9
 // message phase event
-const MESSAGE = 10
+// const MESSAGE = 10
 // vote phase event
 const VOTE = 11
 // round end event
@@ -29,7 +29,7 @@ const ROUND_END = 12
 // return vote status event
 const VOTE_REPLY = 13
 // return msg status event
-const MSG_REPLY = 14
+// const MSG_REPLY = 14
 // broadcast h for Pedersen Commitment
 const BCAST_PEDERSEN_H = 15
 // challenge honesty for Fujisaki-Okamoto Commitment's configuration

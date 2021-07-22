@@ -3,7 +3,7 @@ package client
 import (
 	"fmt"
 	"math/big"
-	"strconv"
+	// "strconv"
 	"zRep/cmd/bridge"
 	"zRep/primitive/fujiokam"
 	"zRep/proto"
@@ -30,9 +30,9 @@ func Handle(buf []byte, dissentClient *DissentClient) {
 	case proto.GOT_SIGNS:
 		handleGotSignatures(event.Params, dissentClient)
 		break
-	case proto.MESSAGE:
-		handleMsg(event.Params, dissentClient)
-		break
+	// case proto.MESSAGE:
+	// 	handleMsg(event.Params, dissentClient)
+	// 	break
 	case proto.VOTE:
 		handleVotePhaseStart(dissentClient)
 		break
@@ -45,9 +45,9 @@ func Handle(buf []byte, dissentClient *DissentClient) {
 	case proto.VOTE_REPLY:
 		handleVoteReply(event.Params)
 		break
-	case proto.MSG_REPLY:
-		handleMsgReply(event.Params)
-		break
+	// case proto.MSG_REPLY:
+	// 	handleMsgReply(event.Params)
+	// 	break
 	default:
 		fmt.Println("Unrecognized request")
 		break
@@ -165,15 +165,15 @@ func handleVoteReply(params map[string]interface{}) {
 }
 
 // handle vote reply
-func handleMsgReply(params map[string]interface{}) {
-	status := params["reply"].(bool)
-	if status == true {
-		fmt.Println("[client] Messaging success!");
-		fmt.Print("cmd >> ")
-	}else {
-		fmt.Println("[client] Fails to send message!");
-	}
-}
+// func handleMsgReply(params map[string]interface{}) {
+// 	status := params["reply"].(bool)
+// 	if status == true {
+// 		fmt.Println("[client] Messaging success!");
+// 		fmt.Print("cmd >> ")
+// 	}else {
+// 		fmt.Println("[client] Fails to send message!");
+// 	}
+// }
 
 // set one-time pseudonym and g, and print out info
 func handleAnnouncementFinalize(params map[string]interface{}, dissentClient *DissentClient) {
@@ -214,34 +214,34 @@ func handleAnnouncementFinalize(params map[string]interface{}, dissentClient *Di
 }
 
 // receive the One-time pseudonym, reputation, and msg from server side
-func handleMsg(params map[string]interface{}, dissentClient *DissentClient) {
-	// get the reputation
-	// byteRep := params["rep"].([]byte)
-	// rep := dissentClient.Suite.Point()
-	// err := rep.UnmarshalBinary(byteRep)
-	// util.CheckErr(err)
-	// get One-time pseudonym
-	byteNym := params["nym"].([]byte)
-	nym := dissentClient.Suite.Point()
-	err := nym.UnmarshalBinary(byteNym)
-	util.CheckErr(err)
-	// get msg text
-	text := params["text"].(string)
-	// get msg id
-	msgID := params["msgID"].(int)
-	// don't print for sender
-	if(dissentClient.OnetimePseudoNym.Equal(nym)) {
-		return
-	}
-	// print out message in client side
-	fmt.Println()
-	fmt.Println("Message from ", nym)
-	// fmt.Println("Reputation commitment: ", rep);
-	fmt.Println("Message ID: " + strconv.Itoa(msgID));
-	fmt.Println("Message Text: " + text);
-	fmt.Println();
-	fmt.Print("cmd >> ")
-}
+// func handleMsg(params map[string]interface{}, dissentClient *DissentClient) {
+// 	// get the reputation
+// 	// byteRep := params["rep"].([]byte)
+// 	// rep := dissentClient.Suite.Point()
+// 	// err := rep.UnmarshalBinary(byteRep)
+// 	// util.CheckErr(err)
+// 	// get One-time pseudonym
+// 	byteNym := params["nym"].([]byte)
+// 	nym := dissentClient.Suite.Point()
+// 	err := nym.UnmarshalBinary(byteNym)
+// 	util.CheckErr(err)
+// 	// get msg text
+// 	text := params["text"].(string)
+// 	// get msg id
+// 	msgID := params["msgID"].(int)
+// 	// don't print for sender
+// 	if(dissentClient.OnetimePseudoNym.Equal(nym)) {
+// 		return
+// 	}
+// 	// print out message in client side
+// 	fmt.Println()
+// 	fmt.Println("Message from ", nym)
+// 	// fmt.Println("Reputation commitment: ", rep);
+// 	fmt.Println("Message ID: " + strconv.Itoa(msgID));
+// 	fmt.Println("Message Text: " + text);
+// 	fmt.Println();
+// 	fmt.Print("cmd >> ")
+// }
 
 func handleGotSignatures(params map[string]interface{}, dissentClient *DissentClient) {
 	// verify signature
