@@ -209,12 +209,27 @@ func vote() {
 	}
 }
 
+func addFakeClients(num int) {
+	suite := anonCoordinator.Suite
+	HT := anonCoordinator.PedersenBase.HT
+	for i := 0; i < num; i++ {
+		// public key = g^sk mod p
+		sk := suite.Secret().Pick(random.Stream)
+		pk := suite.Point().Mul(nil, sk)
+		// commitment = GT^0 * HT^r mod p
+		r := suite.Secret().Pick(random.Stream)
+		comm := suite.Point().Mul(HT, r)
+		anonCoordinator.AddIntoRepMap(pk, comm)
+	}
+}
+
 func waitKeypress(prompt string) {
 	fmt.Print(prompt)
 	reader := bufio.NewReader(os.Stdin)
 	reader.ReadLine()
 }
 
+var isFirstRound bool = true
 func Launch() {
 	// init coordinator
 	initCoordinator()
@@ -224,11 +239,13 @@ func Launch() {
 	// start listener
 	go startServerListener(listener)
 	fmt.Println("** Note: Type ok to finish the server configuration. **")
-	// read ok to start life cycle
+	// wait keypress to start life cycle
 	waitKeypress("Press ENTER to start:\n")
 	fmt.Println("[debug] Servers in the current network:")
-	fmt.Println(anonCoordinator.ServerList)
-	fmt.Println("Configuring parameters of commitments.")
+	for _,info := range anonCoordinator.ServerList {
+		fmt.Println("[debug] *", info.Addr)
+	}
+	fmt.Println("[debug] Configuring parameters of commitments.")
 	configCommParams()
 	anonCoordinator.Status = READY_FOR_NEW_ROUND
 	for {
@@ -239,6 +256,11 @@ func Launch() {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
+		// add fake clients in the first round
+		if isFirstRound {
+			addFakeClients(10)
+			isFirstRound = false
+		}
 		// clear buffer at the beginning of each round
 		clearBuffer()
 		fmt.Println("******************** New round begin ********************")
@@ -246,10 +268,9 @@ func Launch() {
 			log.Fatal("Fails to be ready for the new round")
 			os.Exit(1)
 		}
-		// waitKeypress("Press ENTER to start new round: ")
+		// announcing phase
 		anonCoordinator.Status = ANNOUNCE
 		fmt.Println("[coordinator] Announcement phase started...")
-		// start announce phase
 		announce()
 		for {
 			if anonCoordinator.Status == MESSAGE {
@@ -257,16 +278,14 @@ func Launch() {
 			}
 			time.Sleep(1000 * time.Millisecond)
 		}
-		// start message and vote phase
-		fmt.Println("[coordinator] Messaging phase started...")
-		// 10 secs for msg
-		// time.Sleep(10000 * time.Millisecond)
+		// posting phase
+		fmt.Println("[coordinator] Posting phase started...")
 		waitKeypress("Press ENTER to end posting:\n")
+		// voting phase
 		vote()
 		fmt.Println("[coordinator] Voting phase started...")
-		// 10 secs for vote
-		// time.Sleep(10000 * time.Millisecond)
 		waitKeypress("Press ENTER to finish voting:\n")
+		// ending phase
 		roundEnd()
 	}
 }
